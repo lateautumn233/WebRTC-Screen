@@ -32,6 +32,23 @@ export function useWebRTC() {
   // 消息序列号
   let messageSeq = 0
 
+  // 清理指定连接（内部使用，不触发额外状态更新）
+  function cleanupPeer(peerId: string) {
+    const channel = dataChannels.value.get(peerId)
+    if (channel) {
+      channel.close()
+      dataChannels.value.delete(peerId)
+    }
+
+    const pc = peerConnections.value.get(peerId)
+    if (pc) {
+      pc.close()
+      peerConnections.value.delete(peerId)
+    }
+
+    receiveBuffers.delete(peerId)
+  }
+
   // 创建 PeerConnection
   function createPeerConnection(peerId: string): RTCPeerConnection {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
@@ -51,8 +68,10 @@ export function useWebRTC() {
       } else if (pc.connectionState === 'failed') {
         connectionState.value = 'failed'
         error.value = '连接失败'
+        cleanupPeer(peerId)
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
         connectionState.value = 'disconnected'
+        cleanupPeer(peerId)
       }
     }
 

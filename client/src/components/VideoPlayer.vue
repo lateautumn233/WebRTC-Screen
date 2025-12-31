@@ -65,7 +65,7 @@
     </div>
 
     <!-- 统计信息面板 -->
-    <div v-if="showStats && stats" class="absolute bottom-3 left-3 right-3">
+    <div v-if="showStats && stats && !isFullscreen" class="absolute bottom-3 left-3 right-3">
       <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-3">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <!-- 分辨率 -->
