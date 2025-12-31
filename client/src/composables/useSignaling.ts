@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client'
 import type { RoomState, SignalingEvents } from '../types'
 import { logger } from '../utils/logger'
 
-const SIGNALING_SERVER = 'http://localhost:3000'
+const SIGNALING_SERVER = import.meta.env.VITE_SIGNALING_SERVER || 'http://localhost:3000'
 
 export function useSignaling() {
   const socket = ref<Socket | null>(null)

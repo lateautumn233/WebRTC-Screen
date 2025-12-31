@@ -141,11 +141,17 @@ npm run build
 
 #### 3. 配置信令服务器地址
 
-修改客户端信令服务器地址（构建前修改）：
+创建 `.env.production` 文件（或设置环境变量）：
 
-```typescript
-// client/src/composables/useSignaling.ts
-const SIGNALING_SERVER = 'https://your-server.com'  // 改为你的服务器地址
+```bash
+# client/.env.production
+VITE_SIGNALING_SERVER=https://your-server.com
+```
+
+或在构建时指定：
+
+```bash
+VITE_SIGNALING_SERVER=https://your-server.com npm run build
 ```
 
 #### 4. 部署
