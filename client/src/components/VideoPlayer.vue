@@ -2,12 +2,12 @@
   <div
     ref="containerRef"
     class="relative bg-black rounded-xl overflow-hidden shadow-lg"
-    :class="{ 'fixed inset-0 z-50 rounded-none': isFullscreen }"
+    :class="{ 'fixed inset-0 z-50 rounded-none': isFullscreen || isPageFullscreen }"
   >
     <!-- 视频/Canvas 容器 -->
     <div
       class="bg-gray-900 flex items-center justify-center"
-      :class="isFullscreen ? 'w-full h-full' : 'aspect-video'"
+      :class="(isFullscreen || isPageFullscreen) ? 'w-full h-full' : 'aspect-video'"
     >
       <!-- 本地预览 (video 元素) -->
       <video
@@ -48,8 +48,23 @@
       </div>
     </div>
 
-    <!-- 全屏按钮 -->
-    <div v-if="mode === 'playback'" class="absolute top-3 right-3">
+    <!-- 全屏按钮组 -->
+    <div v-if="mode === 'playback'" class="absolute top-3 right-3 flex gap-2">
+      <!-- 网页全屏按钮 -->
+      <button
+        @click="togglePageFullscreen"
+        class="p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+        :title="isPageFullscreen ? '退出网页全屏' : '网页全屏'"
+      >
+        <svg v-if="!isPageFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" />
+        </svg>
+        <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <rect x="6" y="6" width="12" height="12" rx="1" stroke-width="2" />
+        </svg>
+      </button>
+
+      <!-- 浏览器全屏按钮 -->
       <button
         @click="toggleFullscreen"
         class="p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
@@ -65,7 +80,7 @@
     </div>
 
     <!-- 统计信息面板 -->
-    <div v-if="showStats && stats && !isFullscreen" class="absolute bottom-3 left-3 right-3">
+    <div v-if="showStats && stats && !isFullscreen && !isPageFullscreen" class="absolute bottom-3 left-3 right-3">
       <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-3">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
           <!-- 分辨率 -->
@@ -94,16 +109,17 @@
 
     <!-- 全屏模式下的退出提示 -->
     <div
-      v-if="isFullscreen"
+      v-if="isFullscreen || isPageFullscreen"
       class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded text-white text-xs opacity-0 hover:opacity-100 transition-opacity"
     >
-      按 ESC 退出全屏
+      {{ isFullscreen ? '按 ESC 退出全屏' : '点击按钮退出网页全屏' }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { api as fullscreen } from 'vue-fullscreen'
 
 interface Props {
   mode: 'preview' | 'playback' | 'idle'
@@ -134,6 +150,7 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const stats = ref<Stats | null>(null)
 const isFullscreen = ref(false)
+const isPageFullscreen = ref(false)
 
 // Canvas 上下文
 let ctx: CanvasRenderingContext2D | null = null
@@ -196,6 +213,18 @@ function toggleFullscreen() {
       document.exitFullscreen()
     }
   }
+}
+
+// 网页全屏切换
+async function togglePageFullscreen() {
+  if (!containerRef.value) return
+
+  await fullscreen.toggle(containerRef.value, {
+    pageOnly: true,
+    callback: (isFs: boolean) => {
+      isPageFullscreen.value = isFs
+    }
+  })
 }
 
 // 监听全屏变化
