@@ -28,6 +28,11 @@ export function useWebRTC() {
   let onIceCandidate: ((peerId: string, candidate: RTCIceCandidateInit) => void) | null = null
   let onConnectionStateChange: ((peerId: string, state: RTCPeerConnectionState) => void) | null = null
   let onDataChannelOpen: ((peerId: string) => void) | null = null
+  let onRemoteTrack: ((peerId: string, stream: MediaStream) => void) | null = null
+
+  // 存储要添加的音频轨道和流
+  let pendingAudioTrack: MediaStreamTrack | null = null
+  let pendingAudioStream: MediaStream | null = null
 
   // 消息序列号
   let messageSeq = 0
@@ -77,6 +82,14 @@ export function useWebRTC() {
 
     pc.ondatachannel = (event) => {
       setupDataChannel(peerId, event.channel)
+    }
+
+    // 接收远程音频轨道
+    pc.ontrack = (event) => {
+      logger.log(`Received remote track from ${peerId}:`, event.track.kind)
+      if (event.streams[0]) {
+        onRemoteTrack?.(peerId, event.streams[0])
+      }
     }
 
     peerConnections.value.set(peerId, pc)
@@ -176,6 +189,12 @@ export function useWebRTC() {
       pc = createPeerConnection(peerId)
     }
 
+    // 如果有音频轨道，添加到 PeerConnection
+    if (pendingAudioTrack && pendingAudioStream) {
+      pc.addTrack(pendingAudioTrack, pendingAudioStream)
+      logger.log(`Added audio track to peer ${peerId}`)
+    }
+
     // 创建 DataChannel
     const channel = pc.createDataChannel('screen-share', {
       ordered: true,
@@ -188,6 +207,13 @@ export function useWebRTC() {
     await pc.setLocalDescription(offer)
 
     return offer
+  }
+
+  // 设置要发送的音频轨道
+  function setAudioTrack(track: MediaStreamTrack | null, stream: MediaStream | null = null) {
+    pendingAudioTrack = track
+    pendingAudioStream = stream
+    logger.log('Audio track set:', track ? 'enabled' : 'disabled')
   }
 
   // 处理收到的 Offer (接收端使用)
@@ -340,6 +366,10 @@ export function useWebRTC() {
     onDataChannelOpen = callback
   }
 
+  function setOnRemoteTrack(callback: (peerId: string, stream: MediaStream) => void) {
+    onRemoteTrack = callback
+  }
+
   // 获取连接数
   function getConnectionCount(): number {
     return peerConnections.value.size
@@ -363,6 +393,7 @@ export function useWebRTC() {
     error,
     createPeerConnection,
     createOffer,
+    setAudioTrack,
     handleOffer,
     handleAnswer,
     addIceCandidate,
@@ -374,6 +405,7 @@ export function useWebRTC() {
     setOnIceCandidate,
     setOnConnectionStateChange,
     setOnDataChannelOpen,
+    setOnRemoteTrack,
     getConnectionCount,
     getConnectedPeers
   }

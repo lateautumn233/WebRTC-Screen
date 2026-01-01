@@ -233,6 +233,13 @@ async function startSharing() {
   const videoTrack = screenCapture.getVideoTrack()
   if (!videoTrack) return
 
+  // 设置音频轨道（如果有）
+  const audioTrack = screenCapture.getAudioTrack()
+  if (audioTrack) {
+    webrtc.setAudioTrack(audioTrack, stream)
+    logger.log('Audio track available for sharing')
+  }
+
   // 初始化编码器
   await webcodecs.initEncoder(videoTrack, encoderSettings.value, (frameData) => {
     const serialized = webcodecs.serializeFrame(frameData)
@@ -246,6 +253,7 @@ async function startSharing() {
 async function stopSharing() {
   await webcodecs.stopEncoder()
   screenCapture.stopCapture()
+  webrtc.setAudioTrack(null, null)
   isStreaming.value = false
 }
 
@@ -316,6 +324,12 @@ function setupWebRTCCallbacks() {
   webrtc.setOnDataChannelOpen((peerId) => {
     logger.log(`DataChannel opened with ${peerId}, requesting keyframe`)
     webcodecs.requestKeyFrame()
+  })
+
+  // 接收远程音频流 (观众端)
+  webrtc.setOnRemoteTrack((peerId, stream) => {
+    logger.log(`Received remote stream from ${peerId}`)
+    videoPlayer.value?.setAudioStream(stream)
   })
 
   // 收到数据 (观众端)

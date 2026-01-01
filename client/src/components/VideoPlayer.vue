@@ -114,6 +114,9 @@
     >
       {{ isFullscreen ? '按 ESC 退出全屏' : '点击按钮退出网页全屏' }}
     </div>
+
+    <!-- 隐藏的音频播放器 -->
+    <audio ref="audioRef" autoplay class="hidden"></audio>
   </div>
 </template>
 
@@ -148,6 +151,7 @@ const props = withDefaults(defineProps<Props>(), {
 const containerRef = ref<HTMLDivElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const audioRef = ref<HTMLAudioElement | null>(null)
 const stats = ref<Stats | null>(null)
 const isFullscreen = ref(false)
 const isPageFullscreen = ref(false)
@@ -345,6 +349,17 @@ function clearCanvas() {
   frameCount = 0
 }
 
+// 设置远程音频流
+function setAudioStream(stream: MediaStream) {
+  if (audioRef.value) {
+    audioRef.value.srcObject = stream
+    // 尝试自动播放，处理浏览器自动播放策略
+    audioRef.value.play().catch((err) => {
+      console.warn('Auto-play blocked, user interaction required:', err)
+    })
+  }
+}
+
 onMounted(() => {
   if (canvasRef.value) {
     ctx = canvasRef.value.getContext('2d')
@@ -364,6 +379,7 @@ defineExpose({
   drawFrame,
   clearCanvas,
   addReceivedBytes,
-  setCodec
+  setCodec,
+  setAudioStream
 })
 </script>
