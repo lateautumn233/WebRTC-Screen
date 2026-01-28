@@ -35,3 +35,4 @@ npm-debug.log*
 # Test
 coverage/
 CONTEXT.md
+CLAUDE.md
