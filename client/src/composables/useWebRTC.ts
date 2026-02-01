@@ -2,9 +2,25 @@ import { ref, shallowRef } from 'vue'
 import type { ConnectionState } from '../types'
 import { logger } from '../utils/logger'
 
+// 从环境变量读取 TURN 配置（Vite: VITE_TURN_URL, VITE_TURN_USER, VITE_TURN_PASS）
+// TURN_URL 示例： 'turn:your-turn-server.com:3478'
+const TURN_URL = (import.meta.env.VITE_TURN_URL as string | undefined) || undefined
+const TURN_USER = (import.meta.env.VITE_TURN_USER as string | undefined) || undefined
+const TURN_PASS = (import.meta.env.VITE_TURN_PASS as string | undefined) || undefined
+
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' }
+  { urls: 'stun:stun1.l.google.com:19302' },
+  // 仅在配置了 TURN_URL 时添加 TURN 条目
+  ...(TURN_URL
+    ? [
+        {
+          urls: TURN_URL,
+          username: TURN_USER,
+          credential: TURN_PASS
+        }
+      ]
+    : [])
 ]
 
 // 分片大小 (16KB，安全值)

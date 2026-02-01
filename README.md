@@ -250,17 +250,17 @@ certbot --nginx -d your-domain.com
 
 如果用户在 NAT 或防火墙后面无法直连，需要配置 TURN 服务器：
 
-```typescript
-// client/src/composables/useWebRTC.ts
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  {
-    urls: 'turn:your-turn-server.com:3478',
-    username: 'user',
-    credential: 'password'
-  }
-]
+通常通过 Vite 环境变量传入（推荐，避免在代码中硬编码）：
+
+```bash
+# 在 client/.env 或 client/.env.production 中设置
+VITE_TURN_URL=turn:your-turn-server.com:3478
+VITE_TURN_USER=user
+VITE_TURN_PASS=password
 ```
+
+> 在 `client/src/composables/useWebRTC.ts` 中会从 `import.meta.env` 读取这些变量并在 `ICE_SERVERS` 中加入 TURN 条目（若已配置）。
+
 
 推荐使用 [coturn](https://github.com/coturn/coturn) 搭建 TURN 服务器。
 
