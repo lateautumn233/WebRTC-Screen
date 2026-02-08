@@ -199,7 +199,7 @@ function handleLeaveRoom() {
 
 // 主持人: 开始共享
 async function startSharing() {
-  const stream = await screenCapture.startCapture({ audio: true })
+  const stream = await screenCapture.startCapture({ audio: true, framerate: encoderSettings.value.framerate })
   if (!stream) return
 
   const videoTrack = screenCapture.getVideoTrack()

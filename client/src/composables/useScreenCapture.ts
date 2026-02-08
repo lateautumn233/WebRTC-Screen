@@ -6,14 +6,16 @@ export function useScreenCapture() {
   const isCapturing = ref(false)
   const error = ref<string | null>(null)
 
-  async function startCapture(options?: { audio?: boolean }) {
+  async function startCapture(options?: { audio?: boolean; framerate?: number }) {
     try {
       error.value = null
+
+      const fps = options?.framerate ?? 60
 
       const displayMediaOptions: DisplayMediaStreamOptions = {
         video: {
           displaySurface: 'monitor',
-          frameRate: { ideal: 60, max: 60 }
+          frameRate: { ideal: fps, max: fps }
         },
         audio: options?.audio ?? true
       }
