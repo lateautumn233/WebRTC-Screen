@@ -63,7 +63,22 @@
                 {{ p.id === roomState.myId ? '我' : p.id.substring(0, 8) }}
               </span>
               <span
-                v-if="p.isSharing"
+                v-if="p.isSharing && p.id !== roomState.myId && watchingSharers.includes(p.id)"
+                class="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs cursor-pointer transition-colors"
+                @click="emit('stopWatch', p.id)"
+                title="点击取消观看"
+              >
+                观看中
+              </span>
+              <button
+                v-else-if="p.isSharing && p.id !== roomState.myId && availableSharers.includes(p.id)"
+                class="px-2 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors"
+                @click="emit('watch', p.id)"
+              >
+                观看
+              </button>
+              <span
+                v-else-if="p.isSharing"
                 class="px-2 py-0.5 bg-red-600/20 text-red-400 rounded text-xs"
               >
                 共享中
@@ -96,6 +111,8 @@ interface Props {
   connected: boolean
   roomState: ConferenceRoomState
   error: string | null
+  availableSharers: string[]
+  watchingSharers: string[]
 }
 
 const props = defineProps<Props>()
@@ -103,6 +120,8 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   join: [roomId: string]
   leave: []
+  watch: [sharerId: string]
+  stopWatch: [sharerId: string]
 }>()
 
 const roomIdInput = ref('')

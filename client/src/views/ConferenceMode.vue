@@ -45,8 +45,12 @@
           :connected="signaling.connected.value"
           :room-state="signaling.roomState.value"
           :error="signaling.error.value"
+          :available-sharers="availableSharers"
+          :watching-sharers="remoteSharers.map(s => s.id)"
           @join="handleJoinRoom"
           @leave="handleLeaveRoom"
+          @watch="startWatching"
+          @stop-watch="stopWatching"
         />
 
         <!-- 编码设置 -->
@@ -71,7 +75,7 @@
             </div>
             <div class="flex justify-between">
               <span class="text-gray-400">共享者数量</span>
-              <span class="text-white">{{ (isSharing ? 1 : 0) + remoteSharers.length }}</span>
+              <span class="text-white">{{ (isSharing ? 1 : 0) + availableSharers.length }}</span>
             </div>
           </div>
         </div>
@@ -104,6 +108,7 @@ const videoGrid = ref<InstanceType<typeof VideoGrid> | null>(null)
 const encoderSettings = ref<EncoderSettings>(loadSettings())
 const isSharing = ref(false)
 const remoteSharers = ref<{ id: string; label?: string }[]>([])
+const availableSharers = ref<string[]>([])
 
 // 监听设置变化
 watch(encoderSettings, (newSettings) => {
@@ -128,6 +133,7 @@ function handleLeaveRoom() {
   webcodecs.stopAllDecoders()
   webrtc.closeAll()
   remoteSharers.value = []
+  availableSharers.value = []
   signaling.disconnect()
   signaling.connect()
 }
@@ -176,6 +182,21 @@ async function stopSharing() {
   // 注意：不关闭作为观看者建立的连接
 }
 
+// 开始观看某个共享者
+function startWatching(sharerId: string) {
+  if (remoteSharers.value.find(s => s.id === sharerId)) return
+  remoteSharers.value.push({ id: sharerId })
+  signaling.requestPeerStream(sharerId)
+}
+
+// 停止观看某个共享者
+function stopWatching(sharerId: string) {
+  remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
+  webcodecs.stopDecoderForSharer(sharerId)
+  webrtc.closePeer(sharerId)
+  videoGrid.value?.clearSharer(sharerId)
+}
+
 // 设置信令回调
 function setupSignalingCallbacks() {
   // 加入房间后，检查已有共享者
@@ -183,10 +204,9 @@ function setupSignalingCallbacks() {
     const myId = signaling.roomState.value.myId
     for (const p of participants) {
       if (p.isSharing && p.id !== myId) {
-        if (!remoteSharers.value.find(s => s.id === p.id)) {
-          remoteSharers.value.push({ id: p.id })
+        if (!availableSharers.value.includes(p.id)) {
+          availableSharers.value.push(p.id)
         }
-        signaling.requestPeerStream(p.id)
       }
     }
   })
@@ -194,17 +214,15 @@ function setupSignalingCallbacks() {
   // 有新共享者开始共享
   signaling.onSharerStarted((sharerId) => {
     logger.log(`Conference: New sharer: ${sharerId}`)
-    // 添加到远程共享者列表
-    if (!remoteSharers.value.find(s => s.id === sharerId)) {
-      remoteSharers.value.push({ id: sharerId })
+    if (!availableSharers.value.includes(sharerId)) {
+      availableSharers.value.push(sharerId)
     }
-    // 请求连接该共享者
-    signaling.requestPeerStream(sharerId)
   })
 
   // 共享者停止共享
   signaling.onSharerStopped((sharerId) => {
     logger.log(`Conference: Sharer stopped: ${sharerId}`)
+    availableSharers.value = availableSharers.value.filter(id => id !== sharerId)
     remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
     webcodecs.stopDecoderForSharer(sharerId)
     webrtc.closePeer(sharerId)
@@ -247,6 +265,7 @@ function setupSignalingCallbacks() {
   // 参与者离开
   signaling.onParticipantLeft((participantId) => {
     logger.log(`Conference: Participant left: ${participantId}`)
+    availableSharers.value = availableSharers.value.filter(id => id !== participantId)
     remoteSharers.value = remoteSharers.value.filter(s => s.id !== participantId)
     webcodecs.stopDecoderForSharer(participantId)
     webrtc.closePeer(participantId)
