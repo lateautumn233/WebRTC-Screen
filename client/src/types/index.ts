@@ -45,10 +45,13 @@ export const DEFAULT_ENCODER_SETTINGS: EncoderSettings = {
 // 连接状态
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'failed'
 
-// 房间角色
-export type RoomRole = 'host' | 'viewer'
+// 房间模式
+export type RoomMode = 'classic' | 'conference'
 
-// 房间状态
+// 房间角色
+export type RoomRole = 'host' | 'viewer' | 'participant'
+
+// 房间状态（经典模式）
 export interface RoomState {
   roomId: string | null
   role: RoomRole | null
@@ -57,10 +60,24 @@ export interface RoomState {
   connected: boolean
 }
 
+// 会议模式参与者信息
+export interface ParticipantInfo {
+  id: string
+  isSharing: boolean
+}
+
+// 会议模式房间状态
+export interface ConferenceRoomState {
+  roomId: string | null
+  myId: string | null
+  participants: ParticipantInfo[]
+  connected: boolean
+}
+
 // 信令消息类型
 export interface SignalingEvents {
-  'join-room': { roomId: string; isHost: boolean }
-  'joined': { role: RoomRole; roomId: string; hasHost?: boolean }
+  'join-room': { roomId: string; isHost: boolean; mode?: RoomMode }
+  'joined': { role: RoomRole; roomId: string; hasHost?: boolean; mode?: RoomMode; participants?: ParticipantInfo[] }
   'room-state': { hostId: string | null; viewerCount: number }
   'host-joined': void
   'host-left': void
@@ -71,6 +88,15 @@ export interface SignalingEvents {
   'stream-requested': { viewerId: string }
   'request-stream': void
   'error': { message: string }
+  // 会议模式事件
+  'conference-state': { participants: ParticipantInfo[] }
+  'start-sharing': void
+  'stop-sharing': void
+  'sharer-started': { sharerId: string }
+  'sharer-stopped': { sharerId: string }
+  'request-peer-stream': { targetId: string }
+  'peer-stream-requested': { viewerId: string }
+  'participant-left': { participantId: string }
 }
 
 // 编码帧数据 (用于 DataChannel 传输)
