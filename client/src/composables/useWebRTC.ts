@@ -34,6 +34,7 @@ export function useWebRTC() {
   const peerConnections = shallowRef<Map<string, RTCPeerConnection>>(new Map())
   const dataChannels = shallowRef<Map<string, RTCDataChannel>>(new Map())
   const connectionState = ref<ConnectionState>('disconnected')
+  const connectionCount = ref(0)
   const error = ref<string | null>(null)
 
   // 接收端：重组分片的缓冲区
@@ -68,6 +69,7 @@ export function useWebRTC() {
     }
 
     receiveBuffers.delete(peerId)
+    connectionCount.value = peerConnections.value.size
   }
 
   // 创建 PeerConnection
@@ -110,6 +112,7 @@ export function useWebRTC() {
 
     peerConnections.value.set(peerId, pc)
     receiveBuffers.set(peerId, new Map())
+    connectionCount.value = peerConnections.value.size
     return pc
   }
 
@@ -349,6 +352,7 @@ export function useWebRTC() {
     }
 
     receiveBuffers.delete(peerId)
+    connectionCount.value = peerConnections.value.size
   }
 
   // 关闭所有连接
@@ -361,6 +365,7 @@ export function useWebRTC() {
 
     receiveBuffers.clear()
     connectionState.value = 'disconnected'
+    connectionCount.value = 0
   }
 
   // 设置回调
@@ -406,6 +411,7 @@ export function useWebRTC() {
     peerConnections,
     dataChannels,
     connectionState,
+    connectionCount,
     error,
     createPeerConnection,
     createOffer,

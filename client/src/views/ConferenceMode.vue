@@ -61,7 +61,7 @@
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
               <span class="text-gray-400">WebRTC 连接数</span>
-              <span class="text-white">{{ webrtc.getConnectionCount() }}</span>
+              <span class="text-white">{{ webrtc.connectionCount.value }}</span>
             </div>
             <div class="flex justify-between">
               <span class="text-gray-400">正在共享</span>
@@ -70,8 +70,8 @@
               </span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">远程共享者</span>
-              <span class="text-white">{{ remoteSharers.length }}</span>
+              <span class="text-gray-400">共享者数量</span>
+              <span class="text-white">{{ (isSharing ? 1 : 0) + remoteSharers.length }}</span>
             </div>
           </div>
         </div>
@@ -178,6 +178,19 @@ async function stopSharing() {
 
 // 设置信令回调
 function setupSignalingCallbacks() {
+  // 加入房间后，检查已有共享者
+  signaling.onJoined((participants) => {
+    const myId = signaling.roomState.value.myId
+    for (const p of participants) {
+      if (p.isSharing && p.id !== myId) {
+        if (!remoteSharers.value.find(s => s.id === p.id)) {
+          remoteSharers.value.push({ id: p.id })
+        }
+        signaling.requestPeerStream(p.id)
+      }
+    }
+  })
+
   // 有新共享者开始共享
   signaling.onSharerStarted((sharerId) => {
     logger.log(`Conference: New sharer: ${sharerId}`)

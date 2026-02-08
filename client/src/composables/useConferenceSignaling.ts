@@ -25,6 +25,7 @@ export function useConferenceSignaling() {
     onOffer: null as ((senderId: string, offer: RTCSessionDescriptionInit) => void) | null,
     onAnswer: null as ((senderId: string, answer: RTCSessionDescriptionInit) => void) | null,
     onIceCandidate: null as ((senderId: string, candidate: RTCIceCandidateInit) => void) | null,
+    onJoined: null as ((participants: ParticipantInfo[]) => void) | null,
   }
 
   function connect() {
@@ -60,6 +61,9 @@ export function useConferenceSignaling() {
         roomState.value.participants = data.participants
       }
       logger.log(`Conference: Joined room ${data.roomId}`)
+      if (data.participants) {
+        callbacks.onJoined?.(data.participants)
+      }
     })
 
     socket.value.on('conference-state', (data: { participants: ParticipantInfo[] }) => {
@@ -175,6 +179,10 @@ export function useConferenceSignaling() {
     callbacks.onIceCandidate = callback
   }
 
+  function onJoined(callback: (participants: ParticipantInfo[]) => void) {
+    callbacks.onJoined = callback
+  }
+
   onUnmounted(() => {
     disconnect()
   })
@@ -199,6 +207,7 @@ export function useConferenceSignaling() {
     onParticipantLeft,
     onOffer,
     onAnswer,
-    onIceCandidate
+    onIceCandidate,
+    onJoined
   }
 }

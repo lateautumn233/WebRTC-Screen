@@ -175,20 +175,30 @@ function updateStats(sharerId: string, width: number, height: number) {
   const frameCount = (sharerFrameCounts.get(sharerId) ?? 0) + 1
   sharerFrameCounts.set(sharerId, frameCount)
 
-  const lastFps = sharerLastFpsUpdate.get(sharerId) ?? now
-  if (now - lastFps >= 1000) {
-    sharerCurrentFps.set(sharerId, Math.round(frameCount * 1000 / (now - lastFps)))
-    sharerFrameCounts.set(sharerId, 0)
+  if (!sharerLastFpsUpdate.has(sharerId)) {
     sharerLastFpsUpdate.set(sharerId, now)
+  } else {
+    const lastFps = sharerLastFpsUpdate.get(sharerId)!
+    const elapsed = now - lastFps
+    if (elapsed >= 1000) {
+      sharerCurrentFps.set(sharerId, Math.round(frameCount * 1000 / elapsed))
+      sharerFrameCounts.set(sharerId, 0)
+      sharerLastFpsUpdate.set(sharerId, now)
+    }
   }
 
   // Bitrate
-  const lastBitrate = sharerLastBitrateUpdate.get(sharerId) ?? now
-  const totalBytes = sharerTotalBytes.get(sharerId) ?? 0
-  if (now - lastBitrate >= 1000) {
-    sharerCurrentBitrate.set(sharerId, Math.round(totalBytes * 8 / 1000 / ((now - lastBitrate) / 1000)))
-    sharerTotalBytes.set(sharerId, 0)
+  if (!sharerLastBitrateUpdate.has(sharerId)) {
     sharerLastBitrateUpdate.set(sharerId, now)
+  } else {
+    const lastBitrate = sharerLastBitrateUpdate.get(sharerId)!
+    const elapsed = now - lastBitrate
+    const totalBytes = sharerTotalBytes.get(sharerId) ?? 0
+    if (elapsed >= 1000) {
+      sharerCurrentBitrate.set(sharerId, Math.round(totalBytes * 8 / 1000 / (elapsed / 1000)))
+      sharerTotalBytes.set(sharerId, 0)
+      sharerLastBitrateUpdate.set(sharerId, now)
+    }
   }
 
   const currentBitrate = sharerCurrentBitrate.get(sharerId) ?? 0
