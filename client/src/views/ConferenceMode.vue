@@ -120,6 +120,20 @@ watch(encoderSettings, (newSettings) => {
 // 计算属性
 const isInRoom = computed(() => signaling.roomState.value.roomId !== null)
 
+// 连接方向前缀：区分"作为共享者"和"作为观看者"的连接
+function viewerKey(peerId: string) { return `viewer:${peerId}` }
+function sharerKey(peerId: string) { return `sharer:${peerId}` }
+function stripKey(key: string) { return key.replace(/^(viewer|sharer):/, '') }
+
+// 只向观看者方向的连接广播数据
+function broadcastToViewers(data: ArrayBuffer) {
+  webrtc.dataChannels.value.forEach((_channel, key) => {
+    if (key.startsWith('viewer:')) {
+      webrtc.sendData(key, data)
+    }
+  })
+}
+
 const videoPlaceholder = computed(() => {
   if (!isInRoom.value) return '请先加入会议房间'
   return '点击"开始共享"共享你的屏幕，或等待其他参与者共享'
@@ -159,7 +173,7 @@ async function startSharing() {
   // 初始化编码器
   await webcodecs.initEncoder(videoTrack, encoderSettings.value, (frameData) => {
     const serialized = webcodecs.serializeFrame(frameData)
-    webrtc.broadcastData(serialized)
+    broadcastToViewers(serialized)
   })
 
   isSharing.value = true
@@ -181,8 +195,10 @@ async function stopSharing() {
   isSharing.value = false
   signaling.stopSharing()
 
-  // 关闭作为共享者建立的连接（观看者发起的连接）
-  // 注意：不关闭作为观看者建立的连接
+  // 关闭所有作为共享者建立的连接（观看者发起的连接）
+  const viewerPeers = [...webrtc.peerConnections.value.keys()]
+    .filter(key => key.startsWith('viewer:'))
+  viewerPeers.forEach(key => webrtc.closePeer(key))
 }
 
 // 开始观看某个共享者
@@ -196,7 +212,7 @@ function startWatching(sharerId: string) {
 function stopWatching(sharerId: string) {
   remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
   webcodecs.stopDecoderForSharer(sharerId)
-  webrtc.closePeer(sharerId)
+  webrtc.closePeer(sharerKey(sharerId))
   videoGrid.value?.clearSharer(sharerId)
 }
 
@@ -235,7 +251,7 @@ function setupSignalingCallbacks() {
     availableSharers.value = availableSharers.value.filter(id => id !== sharerId)
     remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
     webcodecs.stopDecoderForSharer(sharerId)
-    webrtc.closePeer(sharerId)
+    webrtc.closePeer(sharerKey(sharerId))
     videoGrid.value?.clearSharer(sharerId)
   })
 
@@ -243,14 +259,14 @@ function setupSignalingCallbacks() {
   signaling.onPeerStreamRequested(async (viewerId) => {
     if (!isSharing.value) return
     logger.log(`Conference: Creating offer for viewer ${viewerId}`)
-    const offer = await webrtc.createOffer(viewerId)
+    const offer = await webrtc.createOffer(viewerKey(viewerId))
     signaling.sendOffer(viewerId, offer)
   })
 
   // 作为观看者：收到 offer，创建 answer 并初始化解码器
   signaling.onOffer(async (senderId, offer) => {
     logger.log(`Conference: Received offer from ${senderId}`)
-    const answer = await webrtc.handleOffer(senderId, offer)
+    const answer = await webrtc.handleOffer(sharerKey(senderId), offer)
     signaling.sendAnswer(senderId, answer)
 
     // 为该共享者初始化解码器
@@ -264,12 +280,20 @@ function setupSignalingCallbacks() {
   // 作为共享者：收到 answer
   signaling.onAnswer(async (senderId, answer) => {
     logger.log(`Conference: Received answer from ${senderId}`)
-    await webrtc.handleAnswer(senderId, answer)
+    await webrtc.handleAnswer(viewerKey(senderId), answer)
   })
 
-  // ICE candidate
+  // ICE candidate：需要判断属于哪个方向的连接
   signaling.onIceCandidate(async (senderId, candidate) => {
-    await webrtc.addIceCandidate(senderId, candidate)
+    // 尝试两个方向，添加到存在的连接上
+    const hasSharerConn = webrtc.peerConnections.value.has(sharerKey(senderId))
+    const hasViewerConn = webrtc.peerConnections.value.has(viewerKey(senderId))
+    if (hasSharerConn) {
+      await webrtc.addIceCandidate(sharerKey(senderId), candidate)
+    }
+    if (hasViewerConn) {
+      await webrtc.addIceCandidate(viewerKey(senderId), candidate)
+    }
   })
 
   // 参与者离开
@@ -278,45 +302,49 @@ function setupSignalingCallbacks() {
     availableSharers.value = availableSharers.value.filter(id => id !== participantId)
     remoteSharers.value = remoteSharers.value.filter(s => s.id !== participantId)
     webcodecs.stopDecoderForSharer(participantId)
-    webrtc.closePeer(participantId)
+    // 关闭两个方向的连接
+    webrtc.closePeer(sharerKey(participantId))
+    webrtc.closePeer(viewerKey(participantId))
     videoGrid.value?.clearSharer(participantId)
   })
 }
 
 // 设置 WebRTC 回调
 function setupWebRTCCallbacks() {
-  // ICE candidate
+  // ICE candidate：peerId 带方向前缀，需要还原原始 ID 发送信令
   webrtc.setOnIceCandidate((peerId, candidate) => {
-    signaling.sendIceCandidate(peerId, candidate)
+    signaling.sendIceCandidate(stripKey(peerId), candidate)
   })
 
-  // DataChannel 打开时请求关键帧（作为共享者端）
+  // DataChannel 打开时请求关键帧（仅作为共享者端，即 viewer: 前缀的连接）
   webrtc.setOnDataChannelOpen((peerId) => {
     logger.log(`Conference: DataChannel opened with ${peerId}`)
-    if (isSharing.value) {
+    if (isSharing.value && peerId.startsWith('viewer:')) {
       webcodecs.requestKeyFrame()
     }
   })
 
-  // 接收远程音频流
+  // 接收远程音频流（peerId 带前缀，还原为原始 ID）
   webrtc.setOnRemoteTrack((peerId, stream) => {
-    logger.log(`Conference: Received remote audio from ${peerId}`)
-    videoGrid.value?.setAudioStream(peerId, stream)
+    const originalId = stripKey(peerId)
+    logger.log(`Conference: Received remote audio from ${originalId}`)
+    videoGrid.value?.setAudioStream(originalId, stream)
   })
 
-  // 收到数据（作为观看者端）
+  // 收到数据（作为观看者端，peerId 带 sharer: 前缀）
   webrtc.setOnDataReceived((peerId, data) => {
+    const originalId = stripKey(peerId)
     // 统计接收码率
-    videoGrid.value?.addReceivedBytes(peerId, data.byteLength)
+    videoGrid.value?.addReceivedBytes(originalId, data.byteLength)
 
     const frameData = webcodecs.deserializeFrame(data)
 
     // 更新编码器信息
     if (frameData.type === 'config' && frameData.codec) {
-      videoGrid.value?.setCodec(peerId, frameData.codec)
+      videoGrid.value?.setCodec(originalId, frameData.codec)
     }
 
-    webcodecs.decodeFrameForSharer(peerId, frameData)
+    webcodecs.decodeFrameForSharer(originalId, frameData)
   })
 }
 
