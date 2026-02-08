@@ -166,7 +166,7 @@ const props = withDefaults(defineProps<{
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const isFullscreenSharer = ref<string | null>(null)
 const isPageFullscreenSharer = ref<string | null>(null)
-const showStats = ref(true)
+const showStats = ref(false)
 
 // 动态网格布局
 const gridClass = computed(() => {

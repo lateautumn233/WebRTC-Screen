@@ -15,8 +15,21 @@
       </span>
     </div>
 
-    <!-- 房间号输入 -->
+    <!-- 用户名输入 -->
     <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-300 mb-2">用户名</label>
+      <input
+        v-model="usernameInput"
+        type="text"
+        placeholder="输入用户名"
+        :disabled="inRoom"
+        class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+        @input="onUsernameChange"
+      />
+    </div>
+
+    <!-- 房间号输入 -->
+    <div class="mb-4 relative">
       <label class="block text-sm font-medium text-gray-300 mb-2">房间号</label>
       <input
         v-model="roomIdInput"
@@ -24,7 +37,29 @@
         placeholder="输入房间号"
         :disabled="inRoom"
         class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+        @focus="showHistory = true"
+        @blur="hideHistory"
       />
+      <!-- 房间历史下拉 -->
+      <div
+        v-if="showHistory && !inRoom && roomHistory.length > 0"
+        class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+      >
+        <div
+          v-for="room in roomHistory"
+          :key="room"
+          class="flex items-center justify-between px-4 py-2 hover:bg-gray-700 cursor-pointer"
+          @mousedown.prevent="selectRoom(room)"
+        >
+          <span class="text-white text-sm font-mono">{{ room }}</span>
+          <button
+            class="text-gray-500 hover:text-red-400 text-xs"
+            @mousedown.prevent.stop="removeHistory(room)"
+          >
+            删除
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 加入按钮 -->
@@ -83,8 +118,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { RoomState } from '../types'
+import { loadUsername, saveUsername, loadRoomHistory, removeRoomHistory } from '../utils/storage'
 
 interface Props {
   connected: boolean
@@ -95,18 +131,44 @@ interface Props {
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  join: [roomId: string, isHost: boolean]
+  join: [roomId: string, isHost: boolean, username: string]
   leave: []
 }>()
 
+const usernameInput = ref('')
 const roomIdInput = ref('')
+const showHistory = ref(false)
+const roomHistory = ref<string[]>([])
 
 const inRoom = computed(() => props.roomState.roomId !== null)
+
+onMounted(() => {
+  usernameInput.value = loadUsername()
+  roomHistory.value = loadRoomHistory()
+})
+
+function onUsernameChange() {
+  saveUsername(usernameInput.value)
+}
+
+function selectRoom(roomId: string) {
+  roomIdInput.value = roomId
+  showHistory.value = false
+}
+
+function removeHistory(roomId: string) {
+  removeRoomHistory(roomId)
+  roomHistory.value = loadRoomHistory()
+}
+
+function hideHistory() {
+  setTimeout(() => { showHistory.value = false }, 150)
+}
 
 function handleJoin(isHost: boolean) {
   const roomId = roomIdInput.value.trim()
   if (roomId) {
-    emit('join', roomId, isHost)
+    emit('join', roomId, isHost, usernameInput.value.trim())
   }
 }
 
@@ -114,4 +176,10 @@ function handleLeave() {
   roomIdInput.value = ''
   emit('leave')
 }
+
+function setRoomId(roomId: string) {
+  roomIdInput.value = roomId
+}
+
+defineExpose({ setRoomId })
 </script>

@@ -6,6 +6,7 @@ const PORT = 3000
 interface ParticipantInfo {
   id: string
   isSharing: boolean
+  username?: string
 }
 
 interface Room {
@@ -13,6 +14,7 @@ interface Room {
   viewers: Set<string>
   mode: 'classic' | 'conference'
   participants: Map<string, ParticipantInfo>
+  usernames: Map<string, string>
 }
 
 const rooms = new Map<string, Room>()
@@ -31,7 +33,8 @@ function getOrCreateRoom(roomId: string): Room {
       host: null,
       viewers: new Set(),
       mode: 'classic',
-      participants: new Map()
+      participants: new Map(),
+      usernames: new Map()
     })
   }
   return rooms.get(roomId)!
@@ -43,8 +46,8 @@ io.on('connection', (socket: Socket) => {
   let currentRoom: string | null = null
 
   // 加入房间
-  socket.on('join-room', (data: { roomId: string; isHost: boolean; mode?: 'classic' | 'conference' }) => {
-    const { roomId, isHost, mode } = data
+  socket.on('join-room', (data: { roomId: string; isHost: boolean; mode?: 'classic' | 'conference'; username?: string }) => {
+    const { roomId, isHost, mode, username } = data
     const room = getOrCreateRoom(roomId)
 
     // 离开之前的房间
@@ -55,6 +58,7 @@ io.on('connection', (socket: Socket) => {
         if (oldRoom.mode === 'conference') {
           const wasSharing = oldRoom.participants.get(socket.id)?.isSharing
           oldRoom.participants.delete(socket.id)
+          oldRoom.usernames.delete(socket.id)
           if (wasSharing) {
             io.to(currentRoom).emit('sharer-stopped', { sharerId: socket.id })
           }
@@ -66,6 +70,7 @@ io.on('connection', (socket: Socket) => {
             rooms.delete(currentRoom)
           }
         } else {
+          oldRoom.usernames.delete(socket.id)
           if (oldRoom.host === socket.id) {
             oldRoom.host = null
             io.to(currentRoom).emit('host-left')
@@ -94,7 +99,8 @@ io.on('connection', (socket: Socket) => {
 
     if (room.mode === 'conference') {
       // 会议模式：所有人都是参与者
-      room.participants.set(socket.id, { id: socket.id, isSharing: false })
+      room.participants.set(socket.id, { id: socket.id, isSharing: false, username: username || undefined })
+      if (username) room.usernames.set(socket.id, username)
       console.log(`Participant ${socket.id} joined conference room ${roomId}`)
 
       socket.emit('joined', {
@@ -110,6 +116,7 @@ io.on('connection', (socket: Socket) => {
       })
     } else {
       // 经典模式：保持现有逻辑
+      if (username) room.usernames.set(socket.id, username)
       if (isHost) {
         if (room.host && room.host !== socket.id) {
           socket.emit('error', { message: '房间已有主持人' })
@@ -131,9 +138,12 @@ io.on('connection', (socket: Socket) => {
       }
 
       // 广播房间状态
+      const usernames: Record<string, string> = {}
+      room.usernames.forEach((name, id) => { usernames[id] = name })
       io.to(roomId).emit('room-state', {
         hostId: room.host,
-        viewerCount: room.viewers.size
+        viewerCount: room.viewers.size,
+        usernames
       })
     }
   })
@@ -222,6 +232,7 @@ io.on('connection', (socket: Socket) => {
         if (room.mode === 'conference') {
           const wasSharing = room.participants.get(socket.id)?.isSharing
           room.participants.delete(socket.id)
+          room.usernames.delete(socket.id)
 
           if (wasSharing) {
             io.to(currentRoom).emit('sharer-stopped', { sharerId: socket.id })
@@ -236,6 +247,7 @@ io.on('connection', (socket: Socket) => {
             console.log(`Conference room ${currentRoom} deleted`)
           }
         } else {
+          room.usernames.delete(socket.id)
           if (room.host === socket.id) {
             room.host = null
             io.to(currentRoom).emit('host-left')
@@ -245,9 +257,12 @@ io.on('connection', (socket: Socket) => {
           }
 
           // 广播更新的房间状态
+          const usernames: Record<string, string> = {}
+          room.usernames.forEach((name, id) => { usernames[id] = name })
           io.to(currentRoom).emit('room-state', {
             hostId: room.host,
-            viewerCount: room.viewers.size
+            viewerCount: room.viewers.size,
+            usernames
           })
 
           // 清理空房间

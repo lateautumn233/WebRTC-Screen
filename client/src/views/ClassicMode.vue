@@ -66,6 +66,7 @@
       <div class="space-y-6">
         <!-- 房间面板 -->
         <RoomPanel
+          ref="roomPanel"
           :connected="signaling.connected.value"
           :room-state="signaling.roomState.value"
           :error="signaling.error.value"
@@ -110,7 +111,7 @@ import { useWebCodecs } from '../composables/useWebCodecs'
 import { useWebRTC } from '../composables/useWebRTC'
 import type { EncoderSettings } from '../types'
 import { logger } from '../utils/logger'
-import { saveSettings, loadSettings } from '../utils/storage'
+import { saveSettings, loadSettings, saveSession, loadSession, clearSession, saveRoomHistory, loadUsername } from '../utils/storage'
 
 // Composables
 const signaling = useSignaling()
@@ -120,6 +121,7 @@ const webrtc = useWebRTC()
 
 // 状态
 const videoPlayer = ref<InstanceType<typeof VideoPlayer> | null>(null)
+const roomPanel = ref<InstanceType<typeof RoomPanel> | null>(null)
 const encoderSettings = ref<EncoderSettings>(loadSettings())
 const isStreaming = ref(false)
 const isReceiving = ref(false)
@@ -181,11 +183,14 @@ const connectionStateClass = computed(() => {
 })
 
 // 房间操作
-function handleJoinRoom(roomId: string, asHost: boolean) {
-  signaling.joinRoom(roomId, asHost)
+function handleJoinRoom(roomId: string, asHost: boolean, username: string) {
+  signaling.joinRoom(roomId, asHost, username)
+  saveSession({ roomId, mode: 'classic', isHost: asHost })
+  saveRoomHistory(roomId)
 }
 
 function handleLeaveRoom() {
+  clearSession()
   stopSharing()
   webrtc.closeAll()
   signaling.disconnect()
@@ -319,6 +324,20 @@ onMounted(() => {
   signaling.connect()
   setupSignalingCallbacks()
   setupWebRTCCallbacks()
+
+  // 会话恢复
+  const session = loadSession()
+  if (session && session.mode === 'classic') {
+    const username = loadUsername()
+    // 等待连接建立后自动加入
+    const unwatch = watch(() => signaling.connected.value, (connected) => {
+      if (connected) {
+        roomPanel.value?.setRoomId(session.roomId)
+        signaling.joinRoom(session.roomId, session.isHost ?? false, username)
+        unwatch()
+      }
+    }, { immediate: true })
+  }
 })
 
 onUnmounted(() => {

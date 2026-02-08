@@ -111,12 +111,12 @@ export function useSignaling() {
     }
   }
 
-  function joinRoom(roomId: string, isHost: boolean) {
+  function joinRoom(roomId: string, isHost: boolean, username?: string) {
     if (!socket.value?.connected) {
       error.value = '未连接到服务器'
       return
     }
-    socket.value.emit('join-room', { roomId, isHost, mode: 'classic' as const })
+    socket.value.emit('join-room', { roomId, isHost, mode: 'classic' as const, username })
   }
 
   function sendOffer(targetId: string, offer: RTCSessionDescriptionInit) {

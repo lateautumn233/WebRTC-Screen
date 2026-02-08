@@ -64,6 +64,7 @@ export interface RoomState {
 export interface ParticipantInfo {
   id: string
   isSharing: boolean
+  username?: string
 }
 
 // 会议模式房间状态
@@ -76,7 +77,7 @@ export interface ConferenceRoomState {
 
 // 信令消息类型
 export interface SignalingEvents {
-  'join-room': { roomId: string; isHost: boolean; mode?: RoomMode }
+  'join-room': { roomId: string; isHost: boolean; mode?: RoomMode; username?: string }
   'joined': { role: RoomRole; roomId: string; hasHost?: boolean; mode?: RoomMode; participants?: ParticipantInfo[] }
   'room-state': { hostId: string | null; viewerCount: number }
   'host-joined': void

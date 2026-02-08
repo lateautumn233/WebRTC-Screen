@@ -42,6 +42,7 @@
       <div class="space-y-6">
         <!-- 房间面板 -->
         <ConferenceRoomPanel
+          ref="roomPanel"
           :connected="signaling.connected.value"
           :room-state="signaling.roomState.value"
           :error="signaling.error.value"
@@ -95,7 +96,7 @@ import { useConferenceWebCodecs } from '../composables/useConferenceWebCodecs'
 import { useWebRTC } from '../composables/useWebRTC'
 import type { EncoderSettings } from '../types'
 import { logger } from '../utils/logger'
-import { saveSettings, loadSettings } from '../utils/storage'
+import { saveSettings, loadSettings, saveSession, clearSession, loadSession, saveRoomHistory, loadUsername } from '../utils/storage'
 
 // Composables
 const signaling = useConferenceSignaling()
@@ -105,6 +106,7 @@ const webrtc = useWebRTC()
 
 // 状态
 const videoGrid = ref<InstanceType<typeof VideoGrid> | null>(null)
+const roomPanel = ref<InstanceType<typeof ConferenceRoomPanel> | null>(null)
 const encoderSettings = ref<EncoderSettings>(loadSettings())
 const isSharing = ref(false)
 const remoteSharers = ref<{ id: string; label?: string }[]>([])
@@ -124,8 +126,8 @@ const videoPlaceholder = computed(() => {
 })
 
 // 房间操作
-function handleJoinRoom(roomId: string) {
-  signaling.joinRoom(roomId)
+function handleJoinRoom(roomId: string, username?: string) {
+  signaling.joinRoom(roomId, username)
 }
 
 function handleLeaveRoom() {
@@ -136,6 +138,7 @@ function handleLeaveRoom() {
   availableSharers.value = []
   signaling.disconnect()
   signaling.connect()
+  clearSession()
 }
 
 // 开始共享
@@ -201,6 +204,13 @@ function stopWatching(sharerId: string) {
 function setupSignalingCallbacks() {
   // 加入房间后，检查已有共享者
   signaling.onJoined((participants) => {
+    // 保存会话和房间历史
+    const roomId = signaling.roomState.value.roomId
+    if (roomId) {
+      saveSession({ roomId, mode: 'conference' })
+      saveRoomHistory(roomId)
+    }
+
     const myId = signaling.roomState.value.myId
     for (const p of participants) {
       if (p.isSharing && p.id !== myId) {
@@ -314,6 +324,22 @@ onMounted(() => {
   signaling.connect()
   setupSignalingCallbacks()
   setupWebRTCCallbacks()
+
+  // 会话恢复：检查是否有未清除的会话
+  const session = loadSession()
+  if (session && session.mode === 'conference') {
+    const username = loadUsername()
+    // 等待信令连接建立后自动加入
+    const checkConnection = setInterval(() => {
+      if (signaling.connected.value) {
+        clearInterval(checkConnection)
+        roomPanel.value?.setRoomId(session.roomId)
+        signaling.joinRoom(session.roomId, username || undefined)
+      }
+    }, 100)
+    // 5秒超时，避免无限等待
+    setTimeout(() => clearInterval(checkConnection), 5000)
+  }
 })
 
 onUnmounted(() => {

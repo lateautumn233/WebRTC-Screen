@@ -119,12 +119,12 @@ export function useConferenceSignaling() {
     }
   }
 
-  function joinRoom(roomId: string) {
+  function joinRoom(roomId: string, username?: string) {
     if (!socket.value?.connected) {
       error.value = '未连接到服务器'
       return
     }
-    socket.value.emit('join-room', { roomId, isHost: false, mode: 'conference' })
+    socket.value.emit('join-room', { roomId, isHost: false, mode: 'conference', username })
   }
 
   function startSharing() {
