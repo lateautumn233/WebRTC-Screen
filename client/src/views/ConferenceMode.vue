@@ -281,6 +281,12 @@ function setupWebRTCCallbacks() {
     videoGrid.value?.addReceivedBytes(peerId, data.byteLength)
 
     const frameData = webcodecs.deserializeFrame(data)
+
+    // 更新编码器信息
+    if (frameData.type === 'config' && frameData.codec) {
+      videoGrid.value?.setCodec(peerId, frameData.codec)
+    }
+
     webcodecs.decodeFrameForSharer(peerId, frameData)
   })
 }

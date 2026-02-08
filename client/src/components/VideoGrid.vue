@@ -18,25 +18,94 @@
     <div
       v-for="sharer in remoteSharers"
       :key="sharer.id"
-      class="relative bg-black rounded-xl overflow-hidden aspect-video"
+      :ref="(el) => setContainerRef(sharer.id, el as HTMLElement)"
+      class="relative bg-black rounded-xl overflow-hidden"
+      :class="[
+        isFullscreenSharer === sharer.id || isPageFullscreenSharer === sharer.id
+          ? 'fixed inset-0 z-50 rounded-none'
+          : 'aspect-video'
+      ]"
     >
-      <canvas
-        :ref="(el) => setCanvasRef(sharer.id, el as HTMLCanvasElement)"
-        class="w-full h-full object-contain"
-      ></canvas>
+      <div
+        class="bg-gray-900 flex items-center justify-center"
+        :class="(isFullscreenSharer === sharer.id || isPageFullscreenSharer === sharer.id) ? 'w-full h-full' : 'aspect-video'"
+      >
+        <canvas
+          :ref="(el) => setCanvasRef(sharer.id, el as HTMLCanvasElement)"
+          class="w-full h-full object-contain"
+        ></canvas>
+      </div>
+
+      <!-- 标签 -->
       <div class="absolute top-2 left-2 px-2 py-1 bg-green-600 rounded text-xs text-white font-medium">
         {{ sharer.label || sharer.id.substring(0, 8) }}
       </div>
+
+      <!-- 全屏按钮组 -->
+      <div class="absolute top-2 right-2 flex gap-2">
+        <!-- 网页全屏按钮 -->
+        <button
+          @click="togglePageFullscreen(sharer.id)"
+          class="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+          :title="isPageFullscreenSharer === sharer.id ? '退出网页全屏' : '网页全屏'"
+        >
+          <svg v-if="isPageFullscreenSharer !== sharer.id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="2" stroke-width="2" />
+          </svg>
+          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect x="6" y="6" width="12" height="12" rx="1" stroke-width="2" />
+          </svg>
+        </button>
+        <!-- 浏览器全屏按钮 -->
+        <button
+          @click="toggleFullscreen(sharer.id)"
+          class="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+          :title="isFullscreenSharer === sharer.id ? '退出全屏' : '全屏播放'"
+        >
+          <svg v-if="isFullscreenSharer !== sharer.id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+          </svg>
+          <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- 全屏退出提示 -->
+      <div
+        v-if="isFullscreenSharer === sharer.id || isPageFullscreenSharer === sharer.id"
+        class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded text-white text-xs opacity-0 hover:opacity-100 transition-opacity"
+      >
+        {{ isFullscreenSharer === sharer.id ? '按 ESC 退出全屏' : '点击按钮退出网页全屏' }}
+      </div>
+
       <!-- 统计信息 -->
-      <div v-if="sharerStats.get(sharer.id)" class="absolute bottom-2 left-2 right-2">
+      <div
+        v-if="sharerStats.get(sharer.id) && isFullscreenSharer !== sharer.id && isPageFullscreenSharer !== sharer.id"
+        class="absolute bottom-2 left-2 right-2"
+      >
         <div class="bg-black/70 backdrop-blur rounded-lg px-3 py-2">
-          <div class="flex gap-4 text-xs">
-            <span class="text-gray-400">{{ sharerStats.get(sharer.id)?.resolution }}</span>
-            <span class="text-green-400">{{ sharerStats.get(sharer.id)?.fps }} fps</span>
-            <span class="text-blue-400">{{ sharerStats.get(sharer.id)?.bitrate }}</span>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div class="flex flex-col">
+              <span class="text-gray-500">分辨率</span>
+              <span class="text-white font-medium">{{ sharerStats.get(sharer.id)?.resolution }}</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-gray-500">帧率</span>
+              <span class="text-green-400 font-medium">{{ sharerStats.get(sharer.id)?.fps }} fps</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-gray-500">码率</span>
+              <span class="text-blue-400 font-medium">{{ sharerStats.get(sharer.id)?.bitrate }}</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-gray-500">解码器</span>
+              <span class="text-purple-400 font-medium">{{ sharerStats.get(sharer.id)?.codec }}</span>
+            </div>
           </div>
         </div>
       </div>
+
       <audio
         :ref="(el) => setAudioRef(sharer.id, el as HTMLAudioElement)"
         autoplay
@@ -60,7 +129,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, reactive, onUnmounted } from 'vue'
+import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
+import { api as fullscreen } from 'vue-fullscreen'
 
 interface SharerInfo {
   id: string
@@ -71,6 +141,7 @@ interface SharerStats {
   resolution: string
   fps: string
   bitrate: string
+  codec: string
 }
 
 const props = withDefaults(defineProps<{
@@ -82,6 +153,8 @@ const props = withDefaults(defineProps<{
 })
 
 const localVideoRef = ref<HTMLVideoElement | null>(null)
+const isFullscreenSharer = ref<string | null>(null)
+const isPageFullscreenSharer = ref<string | null>(null)
 
 // 动态网格布局
 const gridClass = computed(() => {
@@ -92,7 +165,8 @@ const gridClass = computed(() => {
   return 'grid-cols-2 lg:grid-cols-3'
 })
 
-// Canvas 和 Audio 引用管理
+// Canvas、Audio、Container 引用管理
+const containerRefs = new Map<string, HTMLElement>()
 const canvasRefs = new Map<string, HTMLCanvasElement>()
 const canvasCtxs = new Map<string, CanvasRenderingContext2D>()
 const audioRefs = new Map<string, HTMLAudioElement>()
@@ -105,6 +179,13 @@ const sharerCurrentFps = new Map<string, number>()
 const sharerTotalBytes = new Map<string, number>()
 const sharerLastBitrateUpdate = new Map<string, number>()
 const sharerCurrentBitrate = new Map<string, number>()
+const sharerCodecs = new Map<string, string>()
+
+function setContainerRef(sharerId: string, el: HTMLElement | null) {
+  if (el) {
+    containerRefs.set(sharerId, el)
+  }
+}
 
 function setCanvasRef(sharerId: string, el: HTMLCanvasElement | null) {
   if (el) {
@@ -132,6 +213,50 @@ watch(
   },
   { immediate: true }
 )
+
+// 浏览器全屏切换
+function toggleFullscreen(sharerId: string) {
+  const container = containerRefs.get(sharerId)
+  if (!container) return
+
+  if (isFullscreenSharer.value !== sharerId) {
+    if (container.requestFullscreen) {
+      container.requestFullscreen()
+    }
+  } else {
+    if (document.exitFullscreen) {
+      document.exitFullscreen()
+    }
+  }
+}
+
+// 网页全屏切换
+async function togglePageFullscreen(sharerId: string) {
+  const container = containerRefs.get(sharerId)
+  if (!container) return
+
+  await fullscreen.toggle(container, {
+    pageOnly: true,
+    callback: (isFs: boolean) => {
+      isPageFullscreenSharer.value = isFs ? sharerId : null
+    }
+  })
+}
+
+// 监听浏览器全屏变化
+function handleFullscreenChange() {
+  if (!document.fullscreenElement) {
+    isFullscreenSharer.value = null
+  } else {
+    // 找到哪个 sharer 的容器进入了全屏
+    for (const [sharerId, container] of containerRefs) {
+      if (container === document.fullscreenElement) {
+        isFullscreenSharer.value = sharerId
+        break
+      }
+    }
+  }
+}
 
 // 绘制远程帧
 function drawFrame(sharerId: string, frame: VideoFrame) {
@@ -212,8 +337,26 @@ function updateStats(sharerId: string, width: number, height: number) {
   sharerStats.set(sharerId, {
     resolution: `${width}x${height}`,
     fps: `${sharerCurrentFps.get(sharerId) ?? 0}`,
-    bitrate: bitrateStr
+    bitrate: bitrateStr,
+    codec: sharerCodecs.get(sharerId) ?? '-'
   })
+}
+
+// 设置编码器信息
+function setCodec(sharerId: string, codec: string) {
+  if (codec.startsWith('avc1') || codec.startsWith('avc')) {
+    sharerCodecs.set(sharerId, 'H.264')
+  } else if (codec.startsWith('hvc1') || codec.startsWith('hev1') || codec.startsWith('hevc')) {
+    sharerCodecs.set(sharerId, 'HEVC')
+  } else if (codec.startsWith('vp8')) {
+    sharerCodecs.set(sharerId, 'VP8')
+  } else if (codec.startsWith('vp09') || codec.startsWith('vp9')) {
+    sharerCodecs.set(sharerId, 'VP9')
+  } else if (codec.startsWith('av01') || codec.startsWith('av1')) {
+    sharerCodecs.set(sharerId, 'AV1')
+  } else {
+    sharerCodecs.set(sharerId, codec)
+  }
 }
 
 // 添加接收字节数（用于码率统计）
@@ -239,6 +382,7 @@ function clearSharer(sharerId: string) {
     ctx.fillStyle = '#111'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
   }
+  containerRefs.delete(sharerId)
   canvasRefs.delete(sharerId)
   canvasCtxs.delete(sharerId)
   audioRefs.delete(sharerId)
@@ -249,9 +393,15 @@ function clearSharer(sharerId: string) {
   sharerTotalBytes.delete(sharerId)
   sharerLastBitrateUpdate.delete(sharerId)
   sharerCurrentBitrate.delete(sharerId)
+  sharerCodecs.delete(sharerId)
 }
 
+onMounted(() => {
+  document.addEventListener('fullscreenchange', handleFullscreenChange)
+})
+
 onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
   canvasRefs.clear()
   canvasCtxs.clear()
   audioRefs.clear()
@@ -262,6 +412,7 @@ defineExpose({
   drawFrame,
   setAudioStream,
   addReceivedBytes,
+  setCodec,
   clearSharer
 })
 </script>
