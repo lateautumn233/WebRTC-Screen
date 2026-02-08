@@ -84,6 +84,14 @@ io.on('connection', (socket: Socket) => {
       room.mode = mode || 'classic'
     }
 
+    // 模式不匹配时拒绝加入
+    if (mode && room.mode !== mode) {
+      socket.leave(roomId)
+      currentRoom = null
+      socket.emit('error', { message: `该房间为${room.mode === 'conference' ? '会议' : '经典'}模式，无法以${mode === 'conference' ? '会议' : '经典'}模式加入` })
+      return
+    }
+
     if (room.mode === 'conference') {
       // 会议模式：所有人都是参与者
       room.participants.set(socket.id, { id: socket.id, isSharing: false })

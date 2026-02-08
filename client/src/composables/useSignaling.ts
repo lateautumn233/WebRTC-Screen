@@ -116,7 +116,7 @@ export function useSignaling() {
       error.value = '未连接到服务器'
       return
     }
-    socket.value.emit('join-room', { roomId, isHost })
+    socket.value.emit('join-room', { roomId, isHost, mode: 'classic' as const })
   }
 
   function sendOffer(targetId: string, offer: RTCSessionDescriptionInit) {
