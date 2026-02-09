@@ -36,3 +36,7 @@ npm-debug.log*
 coverage/
 CONTEXT.md
 CLAUDE.md
+
+# Claude Code
+.claude/
+.serena/
