@@ -175,6 +175,12 @@ export function useWebCodecs() {
         if (done || !frame) break
 
         if (encoder.value.state === 'configured') {
+          // 背压控制：编码器队列积压时跳帧，避免延迟累积
+          if (encoder.value.encodeQueueSize > 2) {
+            frame.close()
+            continue
+          }
+
           // 检查是否需要强制关键帧
           const keyFrame = frameCount % keyFrameInterval === 0 || forceNextKeyFrame
           if (forceNextKeyFrame) {
