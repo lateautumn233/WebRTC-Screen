@@ -79,6 +79,7 @@ export function useWebCodecs() {
         width,
         height,
         bitrate: encoderSettings.bitrate * 1_000_000,
+        bitrateMode: encoderSettings.bitrateMode === 'vbr' ? 'variable' : 'constant',
         framerate: encoderSettings.framerate,
         latencyMode: 'realtime',
         hardwareAcceleration: 'prefer-hardware'

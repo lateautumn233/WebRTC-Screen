@@ -68,10 +68,28 @@
     </div>
 
     <!-- 码率滑块 -->
-    <div>
-      <label class="block text-sm font-medium text-gray-300 mb-2">
-        码率: {{ modelValue.bitrate }} Mbps
-      </label>
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <label class="block text-sm font-medium text-gray-300">
+          码率: {{ modelValue.bitrate }} Mbps
+        </label>
+        <div class="flex gap-1">
+          <button
+            v-for="mode in bitrateModes"
+            :key="mode.value"
+            :disabled="disabled"
+            :class="[
+              'px-2 py-0.5 rounded text-xs font-medium transition-all',
+              modelValue.bitrateMode === mode.value
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            ]"
+            @click="updateSetting('bitrateMode', mode.value)"
+          >
+            {{ mode.label }}
+          </button>
+        </div>
+      </div>
       <input
         type="range"
         min="1"
@@ -92,7 +110,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import type { EncoderSettings, CodecType, ResolutionPreset, FrameratePreset } from '../types'
+import type { EncoderSettings, CodecType, ResolutionPreset, FrameratePreset, BitrateMode } from '../types'
 import { useWebCodecs } from '../composables/useWebCodecs'
 
 interface Props {
@@ -126,6 +144,11 @@ const resolutions: { value: ResolutionPreset; label: string }[] = [
 ]
 
 const framerates: FrameratePreset[] = [15, 30, 60]
+
+const bitrateModes: { value: BitrateMode; label: string }[] = [
+  { value: 'cbr', label: 'CBR' },
+  { value: 'vbr', label: 'VBR' }
+]
 
 function updateSetting<K extends keyof EncoderSettings>(key: K, value: EncoderSettings[K]) {
   emit('update:modelValue', { ...props.modelValue, [key]: value })

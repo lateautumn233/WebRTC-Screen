@@ -7,12 +7,16 @@ export type ResolutionPreset = '720p' | '1080p' | '1440p' | 'original'
 // 帧率预设
 export type FrameratePreset = 15 | 30 | 60
 
+// 码率模式
+export type BitrateMode = 'cbr' | 'vbr'
+
 // 编码设置
 export interface EncoderSettings {
   codec: CodecType
   resolution: ResolutionPreset
   framerate: FrameratePreset
   bitrate: number // Mbps
+  bitrateMode: BitrateMode
 }
 
 // 分辨率映射
@@ -39,7 +43,8 @@ export const DEFAULT_ENCODER_SETTINGS: EncoderSettings = {
   codec: 'h264',
   resolution: '1080p',
   framerate: 30,
-  bitrate: 4
+  bitrate: 4,
+  bitrateMode: 'cbr'
 }
 
 // 连接状态
