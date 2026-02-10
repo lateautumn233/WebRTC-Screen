@@ -95,12 +95,22 @@
         v-if="showStats && sharerStats.get(sharer.id) && isFullscreenSharer !== sharer.id && isPageFullscreenSharer !== sharer.id"
         class="absolute bottom-2 left-2 right-2"
       >
-        <div class="bg-black/70 backdrop-blur rounded-lg px-3 py-2">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            <div class="flex flex-col">
+        <div class="bg-black/70 backdrop-blur rounded-lg px-3 py-2 space-y-1.5">
+          <!-- 第一行：媒体信息 -->
+          <div class="flex items-center gap-3 text-xs">
+            <div class="flex items-center gap-1">
               <span class="text-gray-500">分辨率</span>
               <span class="text-white font-medium">{{ sharerStats.get(sharer.id)?.resolution }}</span>
             </div>
+            <div class="flex items-center gap-1">
+              <span class="text-gray-500">编解码器</span>
+              <span class="text-purple-400 font-medium">{{ sharerStats.get(sharer.id)?.codec }}</span>
+            </div>
+          </div>
+          <!-- 分隔线 -->
+          <div class="border-t border-white/10"></div>
+          <!-- 第二行：性能指标 -->
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-1 text-xs">
             <div class="flex flex-col">
               <span class="text-gray-500">帧率</span>
               <span class="text-green-400 font-medium">{{ sharerStats.get(sharer.id)?.fps }} fps</span>
@@ -110,8 +120,16 @@
               <span class="text-blue-400 font-medium">{{ sharerStats.get(sharer.id)?.bitrate }}</span>
             </div>
             <div class="flex flex-col">
-              <span class="text-gray-500">解码器</span>
-              <span class="text-purple-400 font-medium">{{ sharerStats.get(sharer.id)?.codec }}</span>
+              <span class="text-gray-500">编码</span>
+              <span class="text-yellow-400 font-medium">{{ sharerStats.get(sharer.id)?.encodeLatency }}</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-gray-500">解码</span>
+              <span class="text-orange-400 font-medium">{{ sharerStats.get(sharer.id)?.decodeLatency }}</span>
+            </div>
+            <div class="flex flex-col">
+              <span class="text-gray-500">网络</span>
+              <span class="text-rose-400 font-medium">{{ sharerStats.get(sharer.id)?.networkLatency }}</span>
             </div>
           </div>
         </div>
@@ -153,6 +171,9 @@ interface SharerStats {
   fps: string
   bitrate: string
   codec: string
+  encodeLatency: string
+  decodeLatency: string
+  networkLatency: string
 }
 
 const props = withDefaults(defineProps<{
@@ -192,6 +213,17 @@ const sharerTotalBytes = new Map<string, number>()
 const sharerLastBitrateUpdate = new Map<string, number>()
 const sharerCurrentBitrate = new Map<string, number>()
 const sharerCodecs = new Map<string, string>()
+
+// 延迟追踪 (EMA 平滑)
+const sharerEncodeLatency = new Map<string, number>()
+const sharerDecodeLatency = new Map<string, number>()
+const sharerNetworkLatency = new Map<string, number>()
+const EMA_ALPHA = 0.3
+
+function emaSmooth(current: number, newValue: number): number {
+  if (current === 0) return newValue
+  return current * (1 - EMA_ALPHA) + newValue * EMA_ALPHA
+}
 
 function setContainerRef(sharerId: string, el: HTMLElement | null) {
   if (el) {
@@ -271,7 +303,7 @@ function handleFullscreenChange() {
 }
 
 // 绘制远程帧
-function drawFrame(sharerId: string, frame: VideoFrame) {
+function drawFrame(sharerId: string, frame: VideoFrame, decodeLatencyMs?: number) {
   const canvas = canvasRefs.get(sharerId)
   let ctx = canvasCtxs.get(sharerId)
 
@@ -300,6 +332,12 @@ function drawFrame(sharerId: string, frame: VideoFrame) {
 
   ctx.drawImage(frame, 0, 0)
   frame.close()
+
+  // 更新解码延迟
+  if (decodeLatencyMs !== undefined && decodeLatencyMs > 0) {
+    const current = sharerDecodeLatency.get(sharerId) ?? 0
+    sharerDecodeLatency.set(sharerId, emaSmooth(current, decodeLatencyMs))
+  }
 
   // 更新统计
   updateStats(sharerId, width, height)
@@ -346,11 +384,18 @@ function updateStats(sharerId: string, width: number, height: number) {
       : `${currentBitrate} kbps`
   }
 
+  const encLat = sharerEncodeLatency.get(sharerId) ?? 0
+  const decLat = sharerDecodeLatency.get(sharerId) ?? 0
+  const netLat = sharerNetworkLatency.get(sharerId) ?? 0
+
   sharerStats.set(sharerId, {
     resolution: `${width}x${height}`,
     fps: `${sharerCurrentFps.get(sharerId) ?? 0}`,
     bitrate: bitrateStr,
-    codec: sharerCodecs.get(sharerId) ?? '-'
+    codec: sharerCodecs.get(sharerId) ?? '-',
+    encodeLatency: encLat > 0 ? `${encLat.toFixed(1)} ms` : '-',
+    decodeLatency: decLat > 0 ? `${decLat.toFixed(1)} ms` : '-',
+    networkLatency: netLat > 0 ? `${netLat.toFixed(1)} ms` : '-'
   })
 }
 
@@ -369,6 +414,18 @@ function setCodec(sharerId: string, codec: string) {
   } else {
     sharerCodecs.set(sharerId, codec)
   }
+}
+
+// 设置编码延迟（从发送端传来）
+function setEncodeLatency(sharerId: string, latencyMs: number) {
+  const current = sharerEncodeLatency.get(sharerId) ?? 0
+  sharerEncodeLatency.set(sharerId, emaSmooth(current, latencyMs))
+}
+
+// 设置网络延迟（RTT / 2）
+function setNetworkLatency(sharerId: string, latencyMs: number) {
+  const current = sharerNetworkLatency.get(sharerId) ?? 0
+  sharerNetworkLatency.set(sharerId, emaSmooth(current, latencyMs))
 }
 
 // 添加接收字节数（用于码率统计）
@@ -406,6 +463,9 @@ function clearSharer(sharerId: string) {
   sharerLastBitrateUpdate.delete(sharerId)
   sharerCurrentBitrate.delete(sharerId)
   sharerCodecs.delete(sharerId)
+  sharerEncodeLatency.delete(sharerId)
+  sharerDecodeLatency.delete(sharerId)
+  sharerNetworkLatency.delete(sharerId)
 }
 
 onMounted(() => {
@@ -425,6 +485,8 @@ defineExpose({
   setAudioStream,
   addReceivedBytes,
   setCodec,
+  setEncodeLatency,
+  setNetworkLatency,
   clearSharer
 })
 </script>

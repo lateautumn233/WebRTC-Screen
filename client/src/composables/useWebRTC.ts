@@ -29,6 +29,8 @@ const CHUNK_SIZE = 16 * 1024
 // 分片消息类型
 const MSG_TYPE_CHUNK = 0x01
 const MSG_TYPE_COMPLETE = 0x02
+const MSG_TYPE_PING = 0x03
+const MSG_TYPE_PONG = 0x04
 
 export function useWebRTC() {
   const peerConnections = shallowRef<Map<string, RTCPeerConnection>>(new Map())
@@ -46,6 +48,7 @@ export function useWebRTC() {
   let onConnectionStateChange: ((peerId: string, state: RTCPeerConnectionState) => void) | null = null
   let onDataChannelOpen: ((peerId: string) => void) | null = null
   let onRemoteTrack: ((peerId: string, stream: MediaStream) => void) | null = null
+  let onPongReceived: ((peerId: string, rtt: number) => void) | null = null
 
   // 存储要添加的音频轨道和流
   let pendingAudioTrack: MediaStreamTrack | null = null
@@ -137,6 +140,27 @@ export function useWebRTC() {
 
     channel.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
+        const view = new DataView(event.data)
+        const msgType = view.getUint8(0)
+
+        if (msgType === MSG_TYPE_PING) {
+          // 收到 ping，直接回复 pong（原样回传 timestamp）
+          const pong = new ArrayBuffer(9)
+          const pongView = new DataView(pong)
+          pongView.setUint8(0, MSG_TYPE_PONG)
+          pongView.setFloat64(1, view.getFloat64(1, true), true)
+          channel.send(pong)
+          return
+        }
+
+        if (msgType === MSG_TYPE_PONG) {
+          // 收到 pong，计算 RTT
+          const sentTime = view.getFloat64(1, true)
+          const rtt = performance.now() - sentTime
+          onPongReceived?.(peerId, rtt)
+          return
+        }
+
         handleReceivedChunk(peerId, event.data)
       }
     }
@@ -391,6 +415,29 @@ export function useWebRTC() {
     onRemoteTrack = callback
   }
 
+  function setOnPongReceived(callback: (peerId: string, rtt: number) => void) {
+    onPongReceived = callback
+  }
+
+  // 发送 ping 到指定 peer
+  function sendPing(peerId: string) {
+    const channel = dataChannels.value.get(peerId)
+    if (!channel || channel.readyState !== 'open') return
+
+    const ping = new ArrayBuffer(9)
+    const view = new DataView(ping)
+    view.setUint8(0, MSG_TYPE_PING)
+    view.setFloat64(1, performance.now(), true)
+    channel.send(ping)
+  }
+
+  // 发送 ping 到所有 peer
+  function sendPingToAll() {
+    dataChannels.value.forEach((_channel, peerId) => {
+      sendPing(peerId)
+    })
+  }
+
   // 获取连接数
   function getConnectionCount(): number {
     return peerConnections.value.size
@@ -428,6 +475,9 @@ export function useWebRTC() {
     setOnConnectionStateChange,
     setOnDataChannelOpen,
     setOnRemoteTrack,
+    setOnPongReceived,
+    sendPing,
+    sendPingToAll,
     getConnectionCount,
     getConnectedPeers
   }

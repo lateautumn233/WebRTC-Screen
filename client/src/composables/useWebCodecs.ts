@@ -20,7 +20,12 @@ export function useWebCodecs() {
   // 编码输出回调
   let onEncodedFrame: ((data: EncodedFrameData) => void) | null = null
   // 解码输出回调
-  let onDecodedFrame: ((frame: VideoFrame) => void) | null = null
+  let onDecodedFrame: ((frame: VideoFrame, decodeLatencyMs: number) => void) | null = null
+
+  // 编码延迟测量：帧 timestamp -> performance.now()
+  const encodeStartTimes = new Map<number, number>()
+  // 解码延迟测量：帧 timestamp -> performance.now()
+  const decodeStartTimes = new Map<number, number>()
 
   // 检查编解码器支持
   async function checkCodecSupport(codec: CodecType): Promise<boolean> {
@@ -95,12 +100,23 @@ export function useWebCodecs() {
           const data = new ArrayBuffer(chunk.byteLength)
           chunk.copyTo(data)
 
+          // 计算编码延迟
+          const encodeStart = encodeStartTimes.get(chunk.timestamp)
+          const encodeLatencyMs = encodeStart ? performance.now() - encodeStart : undefined
+          encodeStartTimes.delete(chunk.timestamp)
+          // 防止内存泄漏
+          if (encodeStartTimes.size > 100) {
+            const oldest = encodeStartTimes.keys().next().value
+            if (oldest !== undefined) encodeStartTimes.delete(oldest)
+          }
+
           const frameData: EncodedFrameData = {
             type: 'video',
             timestamp: chunk.timestamp,
             duration: chunk.duration ?? undefined,
             data,
-            isKeyFrame: chunk.type === 'key'
+            isKeyFrame: chunk.type === 'key',
+            encodeLatencyMs
           }
 
           // 发送配置信息 (每个关键帧都发送)
@@ -188,6 +204,7 @@ export function useWebCodecs() {
             forceNextKeyFrame = false
             logger.log('Forcing keyframe for new viewer')
           }
+          encodeStartTimes.set(frame.timestamp, performance.now())
           encoder.value.encode(frame, { keyFrame })
           frameCount++
         }
@@ -233,14 +250,17 @@ export function useWebCodecs() {
   let decoderConfig: VideoDecoderConfig | null = null
 
   // 初始化解码器
-  async function initDecoder(onOutput: (frame: VideoFrame) => void) {
+  async function initDecoder(onOutput: (frame: VideoFrame, decodeLatencyMs: number) => void) {
     try {
       error.value = null
       onDecodedFrame = onOutput
 
       decoder.value = new VideoDecoder({
         output: (frame) => {
-          onDecodedFrame?.(frame)
+          const decodeStart = decodeStartTimes.get(frame.timestamp)
+          const decodeLatencyMs = decodeStart ? performance.now() - decodeStart : 0
+          decodeStartTimes.delete(frame.timestamp)
+          onDecodedFrame?.(frame, decodeLatencyMs)
         },
         error: (e) => {
           error.value = `解码器错误: ${e.message}`
@@ -297,6 +317,12 @@ export function useWebCodecs() {
           duration: frameData.duration,
           data: frameData.data
         })
+        decodeStartTimes.set(frameData.timestamp, performance.now())
+        // 防止内存泄漏
+        if (decodeStartTimes.size > 100) {
+          const oldest = decodeStartTimes.keys().next().value
+          if (oldest !== undefined) decodeStartTimes.delete(oldest)
+        }
         decoder.value.decode(chunk)
       } catch (err) {
         logger.error('Decode error:', err)
@@ -321,7 +347,7 @@ export function useWebCodecs() {
 
   // 序列化帧数据用于传输
   function serializeFrame(frameData: EncodedFrameData): ArrayBuffer {
-    const headerSize = 32 // 固定头部大小
+    const headerSize = 36 // 固定头部大小
     const codecBytes = new TextEncoder().encode(frameData.codec ?? '')
     const totalSize = headerSize + codecBytes.length + frameData.data.byteLength
 
@@ -336,6 +362,7 @@ export function useWebCodecs() {
     // 20-23: flags (bit 0 = isKeyFrame)
     // 24-27: codec string length
     // 28-31: width/height packed (16bit each)
+    // 32-35: encodeLatencyMs (float32)
 
     view.setUint32(0, frameData.type === 'video' ? 0 : frameData.type === 'audio' ? 1 : 2, true)
     view.setFloat64(4, frameData.timestamp, true)
@@ -344,6 +371,7 @@ export function useWebCodecs() {
     view.setUint32(24, codecBytes.length, true)
     view.setUint16(28, frameData.width ?? 0, true)
     view.setUint16(30, frameData.height ?? 0, true)
+    view.setFloat32(32, frameData.encodeLatencyMs ?? 0, true)
 
     // codec string
     uint8.set(codecBytes, headerSize)
@@ -355,9 +383,10 @@ export function useWebCodecs() {
 
   // 反序列化帧数据
   function deserializeFrame(buffer: ArrayBuffer): EncodedFrameData {
-    const headerSize = 32
     const view = new DataView(buffer)
     const uint8 = new Uint8Array(buffer)
+    // 兼容旧版 32 字节头和新版 36 字节头
+    const hasExtendedHeader = buffer.byteLength >= 36
 
     const typeNum = view.getUint32(0, true)
     const type = typeNum === 0 ? 'video' : typeNum === 1 ? 'audio' : 'config'
@@ -367,7 +396,9 @@ export function useWebCodecs() {
     const codecLength = view.getUint32(24, true)
     const width = view.getUint16(28, true)
     const height = view.getUint16(30, true)
+    const encodeLatencyMs = hasExtendedHeader ? view.getFloat32(32, true) : 0
 
+    const headerSize = hasExtendedHeader ? 36 : 32
     const codecBytes = uint8.slice(headerSize, headerSize + codecLength)
     const codec = new TextDecoder().decode(codecBytes)
     const data = buffer.slice(headerSize + codecLength)
@@ -380,7 +411,8 @@ export function useWebCodecs() {
       isKeyFrame,
       codec: codec || undefined,
       width: width || undefined,
-      height: height || undefined
+      height: height || undefined,
+      encodeLatencyMs: encodeLatencyMs || undefined
     }
   }
 

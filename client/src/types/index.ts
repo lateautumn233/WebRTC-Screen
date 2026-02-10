@@ -115,4 +115,5 @@ export interface EncodedFrameData {
   codec?: string
   width?: number
   height?: number
+  encodeLatencyMs?: number
 }

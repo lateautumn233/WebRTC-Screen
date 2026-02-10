@@ -111,7 +111,7 @@ const encoderSettings = ref<EncoderSettings>(loadSettings())
 const isSharing = ref(false)
 const remoteSharers = ref<{ id: string; label?: string }[]>([])
 const availableSharers = ref<string[]>([])
-
+let pingInterval: ReturnType<typeof setInterval> | null = null
 // 监听设置变化
 watch(encoderSettings, (newSettings) => {
   saveSettings(newSettings)
@@ -153,6 +153,10 @@ function handleLeaveRoom() {
   signaling.disconnect()
   signaling.connect()
   clearSession()
+  if (pingInterval) {
+    clearInterval(pingInterval)
+    pingInterval = null
+  }
 }
 
 // 开始共享
@@ -271,8 +275,8 @@ function setupSignalingCallbacks() {
 
     // 为该共享者初始化解码器
     if (!webcodecs.hasDecoder(senderId)) {
-      await webcodecs.initDecoderForSharer(senderId, (frame) => {
-        videoGrid.value?.drawFrame(senderId, frame)
+      await webcodecs.initDecoderForSharer(senderId, (frame, decodeLatencyMs) => {
+        videoGrid.value?.drawFrame(senderId, frame, decodeLatencyMs)
       })
     }
   })
@@ -322,6 +326,24 @@ function setupWebRTCCallbacks() {
     if (isSharing.value && peerId.startsWith('viewer:')) {
       webcodecs.requestKeyFrame()
     }
+
+    // 作为观看者：启动 ping 定时器测量网络延迟
+    if (peerId.startsWith('sharer:') && !pingInterval) {
+      pingInterval = setInterval(() => {
+        // 只向 sharer: 前缀的连接发 ping
+        webrtc.dataChannels.value.forEach((_channel, key) => {
+          if (key.startsWith('sharer:')) {
+            webrtc.sendPing(key)
+          }
+        })
+      }, 2000)
+    }
+  })
+
+  // 收到 pong 回复（观看者端）
+  webrtc.setOnPongReceived((peerId, rtt) => {
+    const originalId = stripKey(peerId)
+    videoGrid.value?.setNetworkLatency(originalId, rtt / 2)
   })
 
   // 接收远程音频流（peerId 带前缀，还原为原始 ID）
@@ -342,6 +364,11 @@ function setupWebRTCCallbacks() {
     // 更新编码器信息
     if (frameData.type === 'config' && frameData.codec) {
       videoGrid.value?.setCodec(originalId, frameData.codec)
+    }
+
+    // 传递编码延迟
+    if (frameData.type === 'video' && frameData.encodeLatencyMs) {
+      videoGrid.value?.setEncodeLatency(originalId, frameData.encodeLatencyMs)
     }
 
     webcodecs.decodeFrameForSharer(originalId, frameData)
@@ -375,5 +402,9 @@ onUnmounted(() => {
   webcodecs.stopAllDecoders()
   webrtc.closeAll()
   signaling.disconnect()
+  if (pingInterval) {
+    clearInterval(pingInterval)
+    pingInterval = null
+  }
 })
 </script>

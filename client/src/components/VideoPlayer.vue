@@ -81,27 +81,41 @@
 
     <!-- 统计信息面板 -->
     <div v-if="showStats && stats && !isFullscreen && !isPageFullscreen" class="absolute bottom-3 left-3 right-3">
-      <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-3">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <!-- 分辨率 -->
-          <div class="flex flex-col">
+      <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-3 space-y-2">
+        <!-- 第一行：媒体信息 -->
+        <div class="flex items-center gap-4 text-xs">
+          <div class="flex items-center gap-1.5">
             <span class="text-gray-500">分辨率</span>
             <span class="text-white font-medium">{{ stats.resolution }}</span>
           </div>
-          <!-- 帧率 -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-gray-500">编解码器</span>
+            <span class="text-purple-400 font-medium">{{ stats.codec }}</span>
+          </div>
+        </div>
+        <!-- 分隔线 -->
+        <div class="border-t border-white/10"></div>
+        <!-- 第二行：性能指标 -->
+        <div class="grid grid-cols-3 md:grid-cols-5 gap-2 text-xs">
           <div class="flex flex-col">
             <span class="text-gray-500">帧率</span>
             <span class="text-green-400 font-medium">{{ stats.fps }} fps</span>
           </div>
-          <!-- 码率 -->
           <div class="flex flex-col">
             <span class="text-gray-500">码率</span>
             <span class="text-blue-400 font-medium">{{ stats.bitrate }}</span>
           </div>
-          <!-- 解码器 -->
           <div class="flex flex-col">
-            <span class="text-gray-500">解码器</span>
-            <span class="text-purple-400 font-medium">{{ stats.codec }}</span>
+            <span class="text-gray-500">编码</span>
+            <span class="text-yellow-400 font-medium">{{ stats.encodeLatency }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-gray-500">解码</span>
+            <span class="text-orange-400 font-medium">{{ stats.decodeLatency }}</span>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-gray-500">网络</span>
+            <span class="text-rose-400 font-medium">{{ stats.networkLatency }}</span>
           </div>
         </div>
       </div>
@@ -138,6 +152,9 @@ interface Stats {
   fps: string
   bitrate: string
   codec: string
+  encodeLatency: string
+  decodeLatency: string
+  networkLatency: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -165,6 +182,17 @@ let totalBytes = 0
 let lastBitrateUpdate = 0
 let currentBitrate = 0
 let currentCodec = '-'
+
+// 延迟追踪 (EMA 平滑)
+let currentEncodeLatency = 0
+let currentDecodeLatency = 0
+let currentNetworkLatency = 0
+const EMA_ALPHA = 0.3
+
+function emaSmooth(current: number, newValue: number): number {
+  if (current === 0) return newValue
+  return current * (1 - EMA_ALPHA) + newValue * EMA_ALPHA
+}
 
 // 状态显示
 const statusClass = computed(() => {
@@ -243,7 +271,7 @@ function setStream(stream: MediaStream) {
   }
 }
 
-function drawFrame(frame: VideoFrame) {
+function drawFrame(frame: VideoFrame, decodeLatencyMs?: number) {
   if (!canvasRef.value || !ctx) {
     if (canvasRef.value) {
       ctx = canvasRef.value.getContext('2d')
@@ -270,6 +298,11 @@ function drawFrame(frame: VideoFrame) {
   ctx.drawImage(frame, 0, 0)
   frame.close()
 
+  // 更新解码延迟
+  if (decodeLatencyMs !== undefined && decodeLatencyMs > 0) {
+    currentDecodeLatency = emaSmooth(currentDecodeLatency, decodeLatencyMs)
+  }
+
   // 更新统计
   updateStats(width, height)
 }
@@ -295,6 +328,16 @@ function setCodec(codec: string) {
   } else {
     currentCodec = codec
   }
+}
+
+// 设置编码延迟（从发送端传来）
+function setEncodeLatency(latencyMs: number) {
+  currentEncodeLatency = emaSmooth(currentEncodeLatency, latencyMs)
+}
+
+// 设置网络延迟（RTT / 2）
+function setNetworkLatency(latencyMs: number) {
+  currentNetworkLatency = emaSmooth(currentNetworkLatency, latencyMs)
 }
 
 let frameCount = 0
@@ -332,7 +375,10 @@ function updateStats(width: number, height: number) {
     resolution: `${width}x${height}`,
     fps: `${currentFps}`,
     bitrate: bitrateStr,
-    codec: currentCodec
+    codec: currentCodec,
+    encodeLatency: currentEncodeLatency > 0 ? `${currentEncodeLatency.toFixed(1)} ms` : '-',
+    decodeLatency: currentDecodeLatency > 0 ? `${currentDecodeLatency.toFixed(1)} ms` : '-',
+    networkLatency: currentNetworkLatency > 0 ? `${currentNetworkLatency.toFixed(1)} ms` : '-'
   }
 }
 
@@ -347,6 +393,9 @@ function clearCanvas() {
   currentBitrate = 0
   currentFps = 0
   frameCount = 0
+  currentEncodeLatency = 0
+  currentDecodeLatency = 0
+  currentNetworkLatency = 0
 }
 
 // 设置远程音频流
@@ -380,6 +429,8 @@ defineExpose({
   clearCanvas,
   addReceivedBytes,
   setCodec,
-  setAudioStream
+  setAudioStream,
+  setEncodeLatency,
+  setNetworkLatency
 })
 </script>

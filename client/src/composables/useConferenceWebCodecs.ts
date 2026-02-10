@@ -12,6 +12,9 @@ export function useConferenceWebCodecs() {
   const decoderConfigs = new Map<string, VideoDecoderConfig>()
   const activeDecoders = ref<Set<string>>(new Set())
 
+  // 解码延迟测量：sharerId -> (timestamp -> performance.now())
+  const decoderStartTimes = new Map<string, Map<number, number>>()
+
   // 编码器：直接委托给 baseCodecs
   const initEncoder = baseCodecs.initEncoder
   const stopEncoder = baseCodecs.stopEncoder
@@ -23,14 +26,20 @@ export function useConferenceWebCodecs() {
   // 为特定共享者初始化解码器
   async function initDecoderForSharer(
     sharerId: string,
-    onOutput: (frame: VideoFrame) => void
+    onOutput: (frame: VideoFrame, decodeLatencyMs: number) => void
   ) {
     // 如果已存在，先停止
     await stopDecoderForSharer(sharerId)
 
+    const startTimes = new Map<number, number>()
+    decoderStartTimes.set(sharerId, startTimes)
+
     const decoder = new VideoDecoder({
       output: (frame) => {
-        onOutput(frame)
+        const decodeStart = startTimes.get(frame.timestamp)
+        const decodeLatencyMs = decodeStart ? performance.now() - decodeStart : 0
+        startTimes.delete(frame.timestamp)
+        onOutput(frame, decodeLatencyMs)
       },
       error: (e) => {
         logger.error(`Decoder error for sharer ${sharerId}:`, e)
@@ -83,6 +92,15 @@ export function useConferenceWebCodecs() {
           duration: frameData.duration,
           data: frameData.data
         })
+        const startTimes = decoderStartTimes.get(sharerId)
+        if (startTimes) {
+          startTimes.set(frameData.timestamp, performance.now())
+          // 防止内存泄漏
+          if (startTimes.size > 100) {
+            const oldest = startTimes.keys().next().value
+            if (oldest !== undefined) startTimes.delete(oldest)
+          }
+        }
         decoder.decode(chunk)
       } catch (err) {
         logger.error(`Decode error for sharer ${sharerId}:`, err)
@@ -100,6 +118,7 @@ export function useConferenceWebCodecs() {
       } catch {}
       decoders.delete(sharerId)
       decoderConfigs.delete(sharerId)
+      decoderStartTimes.delete(sharerId)
       activeDecoders.value.delete(sharerId)
       logger.log(`Decoder stopped for sharer ${sharerId}`)
     }

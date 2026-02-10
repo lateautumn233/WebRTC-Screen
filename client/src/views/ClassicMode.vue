@@ -125,6 +125,7 @@ const roomPanel = ref<InstanceType<typeof RoomPanel> | null>(null)
 const encoderSettings = ref<EncoderSettings>(loadSettings())
 const isStreaming = ref(false)
 const isReceiving = ref(false)
+let pingInterval: ReturnType<typeof setInterval> | null = null
 
 // 监听设置变化，自动保存到 localStorage
 watch(encoderSettings, (newSettings) => {
@@ -195,6 +196,10 @@ function handleLeaveRoom() {
   webrtc.closeAll()
   signaling.disconnect()
   signaling.connect()
+  if (pingInterval) {
+    clearInterval(pingInterval)
+    pingInterval = null
+  }
 }
 
 // 主持人: 开始共享
@@ -257,8 +262,8 @@ function setupSignalingCallbacks() {
 
     // 初始化解码器
     if (!webcodecs.isDecoding.value) {
-      await webcodecs.initDecoder((frame) => {
-        videoPlayer.value?.drawFrame(frame)
+      await webcodecs.initDecoder((frame, decodeLatencyMs) => {
+        videoPlayer.value?.drawFrame(frame, decodeLatencyMs)
       })
       isReceiving.value = true
     }
@@ -292,10 +297,22 @@ function setupWebRTCCallbacks() {
     signaling.sendIceCandidate(peerId, candidate)
   })
 
-  // DataChannel 打开时请求关键帧 (主持人端)
+  // DataChannel 打开时请求关键帧 (主持人端) / 启动 ping (观众端)
   webrtc.setOnDataChannelOpen((peerId) => {
     logger.log(`DataChannel opened with ${peerId}, requesting keyframe`)
     webcodecs.requestKeyFrame()
+
+    // 观众端：启动 ping 定时器测量网络延迟
+    if (isViewer.value && !pingInterval) {
+      pingInterval = setInterval(() => {
+        webrtc.sendPingToAll()
+      }, 2000)
+    }
+  })
+
+  // 收到 pong 回复 (观众端)
+  webrtc.setOnPongReceived((_peerId, rtt) => {
+    videoPlayer.value?.setNetworkLatency(rtt / 2)
   })
 
   // 接收远程音频流 (观众端)
@@ -314,6 +331,11 @@ function setupWebRTCCallbacks() {
     // 更新解码器信息
     if (frameData.type === 'config' && frameData.codec) {
       videoPlayer.value?.setCodec(frameData.codec)
+    }
+
+    // 传递编码延迟
+    if (frameData.type === 'video' && frameData.encodeLatencyMs) {
+      videoPlayer.value?.setEncodeLatency(frameData.encodeLatencyMs)
     }
 
     webcodecs.decodeFrame(frameData)
@@ -345,5 +367,9 @@ onUnmounted(() => {
   webcodecs.stopDecoder()
   webrtc.closeAll()
   signaling.disconnect()
+  if (pingInterval) {
+    clearInterval(pingInterval)
+    pingInterval = null
+  }
 })
 </script>
