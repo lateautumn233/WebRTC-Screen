@@ -16,6 +16,8 @@ export function useWebCodecs() {
   const isDecoding = ref(false)
   const error = ref<string | null>(null)
   const settings = ref<EncoderSettings>({ ...DEFAULT_ENCODER_SETTINGS })
+  // 硬件编/解码不可用、已回退到软件编/解码时的提示信息（非阻断性）
+  const hardwareFallback = ref<string | null>(null)
 
   // 编码输出回调
   let onEncodedFrame: ((data: EncodedFrameData) => void) | null = null
@@ -27,27 +29,128 @@ export function useWebCodecs() {
   // 解码延迟测量：帧 timestamp -> performance.now()
   const decodeStartTimes = new Map<number, number>()
 
-  // 检查编解码器支持，探测时使用调用方实际打算使用的分辨率/帧率组合，
-  // 避免固定 1080p@30fps 探测结果与用户真实配置（如 120fps）不一致
-  async function checkCodecSupport(
-    codec: CodecType,
-    width = 1920,
-    height = 1080,
-    framerate = 30
+  // 各编解码器的 profile/level 字符串本身限定了最大分辨率*帧率编码能力
+  // （如 avc1.640028 = H.264 High Profile Level 4.0，硬上限约 1920x1080@30fps）。
+  // 固定用一个 level 会导致 1440p 或高帧率组合被浏览器判定为不支持，即使编解码器本身能处理。
+  // 按 level 从低到高依次探测，取浏览器认可的、能满足当前分辨率/帧率的最低 level。
+  // VP8 编码字符串没有 level 字段，不需要阶梯。
+  const LEVEL_LADDER: Partial<Record<CodecType, string[]>> = {
+    h264: [
+      'avc1.640028', // Level 4.0
+      'avc1.640029', // Level 4.1
+      'avc1.64002A', // Level 4.2
+      'avc1.640032', // Level 5.0
+      'avc1.640033', // Level 5.1
+      'avc1.640034', // Level 5.2
+      'avc1.64003C', // Level 6.0
+      'avc1.64003D', // Level 6.1
+      'avc1.64003E'  // Level 6.2
+    ],
+    hevc: [
+      'hvc1.1.6.L120.90', // Level 4.0
+      'hvc1.1.6.L123.90', // Level 4.1
+      'hvc1.1.6.L150.90', // Level 5.0
+      'hvc1.1.6.L153.90', // Level 5.1
+      'hvc1.1.6.L156.90', // Level 5.2
+      'hvc1.1.6.L180.90', // Level 6.0
+      'hvc1.1.6.L183.90', // Level 6.1
+      'hvc1.1.6.L186.90'  // Level 6.2
+    ],
+    vp9: [
+      'vp09.00.10.08', // Level 1.0
+      'vp09.00.11.08', // Level 1.1
+      'vp09.00.20.08', // Level 2.0
+      'vp09.00.21.08', // Level 2.1
+      'vp09.00.30.08', // Level 3.0
+      'vp09.00.31.08', // Level 3.1
+      'vp09.00.40.08', // Level 4.0
+      'vp09.00.41.08', // Level 4.1
+      'vp09.00.50.08', // Level 5.0
+      'vp09.00.51.08', // Level 5.1
+      'vp09.00.52.08', // Level 5.2
+      'vp09.00.60.08', // Level 6.0
+      'vp09.00.61.08', // Level 6.1
+      'vp09.00.62.08'  // Level 6.2
+    ],
+    av1: [
+      'av01.0.04M.08', // Level 3.0
+      'av01.0.05M.08', // Level 3.1
+      'av01.0.08M.08', // Level 4.0
+      'av01.0.09M.08', // Level 4.1
+      'av01.0.10M.08', // Level 4.2
+      'av01.0.11M.08', // Level 4.3
+      'av01.0.12M.08', // Level 5.0
+      'av01.0.13M.08', // Level 5.1
+      'av01.0.14M.08', // Level 5.2
+      'av01.0.16M.08'  // Level 6.0
+    ]
+  }
+
+  async function isEncoderConfigSupported(
+    codecString: string,
+    width: number,
+    height: number,
+    framerate: number,
+    hardwareAcceleration: HardwareAcceleration
   ): Promise<boolean> {
-    const codecString = CODEC_MAP[codec]
     try {
       const result = await VideoEncoder.isConfigSupported({
         codec: codecString,
         width,
         height,
         bitrate: 4_000_000,
-        framerate
+        framerate,
+        hardwareAcceleration
       })
       return result.supported ?? false
     } catch {
       return false
     }
+  }
+
+  interface ResolvedEncoderConfig {
+    codecString: string
+    hardwareAcceleration: HardwareAcceleration
+    isSoftwareFallback: boolean
+  }
+
+  // 探测能满足目标分辨率/帧率的编解码器字符串：优先尝试硬件编码（按 level 由低到高），
+  // 硬件全部不支持时再尝试软件编码，命中软件时标记 isSoftwareFallback 供调用方提示用户。
+  // 没有 level 阶梯的编解码器（VP8）直接用固定值探测。
+  const encoderConfigCache = new Map<string, ResolvedEncoderConfig | null>()
+  async function resolveEncoderConfig(codec: CodecType, width: number, height: number, framerate: number): Promise<ResolvedEncoderConfig | null> {
+    const cacheKey = `${codec}:${width}x${height}@${framerate}`
+    const cached = encoderConfigCache.get(cacheKey)
+    if (cached !== undefined) return cached
+
+    const candidates = LEVEL_LADDER[codec] ?? [CODEC_MAP[codec]]
+
+    for (const hardwareAcceleration of ['prefer-hardware', 'prefer-software'] as const) {
+      for (const codecString of candidates) {
+        if (await isEncoderConfigSupported(codecString, width, height, framerate, hardwareAcceleration)) {
+          const resolved: ResolvedEncoderConfig = {
+            codecString,
+            hardwareAcceleration,
+            isSoftwareFallback: hardwareAcceleration === 'prefer-software'
+          }
+          encoderConfigCache.set(cacheKey, resolved)
+          return resolved
+        }
+      }
+    }
+    encoderConfigCache.set(cacheKey, null)
+    return null
+  }
+
+  // 检查编解码器支持，探测时使用调用方实际打算使用的分辨率/帧率组合，
+  // 避免固定 1080p@30fps 探测结果与用户真实配置（如 120fps、1440p）不一致
+  async function checkCodecSupport(
+    codec: CodecType,
+    width = 1920,
+    height = 1080,
+    framerate = 30
+  ): Promise<boolean> {
+    return (await resolveEncoderConfig(codec, width, height, framerate)) !== null
   }
 
   // 获取支持的编解码器列表
@@ -79,7 +182,17 @@ export function useWebCodecs() {
 
       const width = resolution?.width ?? trackSettings.width ?? 1920
       const height = resolution?.height ?? trackSettings.height ?? 1080
-      const codecString = CODEC_MAP[encoderSettings.codec]
+      const resolved = await resolveEncoderConfig(encoderSettings.codec, width, height, encoderSettings.framerate)
+      if (!resolved) {
+        throw new Error(`当前浏览器/硬件不支持 ${encoderSettings.codec} 编码 ${width}x${height}@${encoderSettings.framerate}fps`)
+      }
+      const codecString = resolved.codecString
+
+      // 软件编码回退已经在 SettingsPanel 选择编码组合时提前提示过，共享画面下方不再重复展示，
+      // 只保留控制台日志方便排查
+      if (resolved.isSoftwareFallback) {
+        logger.warn(`${encoderSettings.codec.toUpperCase()} 未检测到可用硬件编码器，已切换为软件编码，可能增加 CPU 占用`)
+      }
 
       // 缓存的 config 数据，用于新观众加入时重发
       let cachedConfigData: EncodedFrameData | null = null
@@ -93,7 +206,7 @@ export function useWebCodecs() {
         bitrateMode: encoderSettings.bitrateMode === 'vbr' ? 'variable' : 'constant',
         framerate: encoderSettings.framerate,
         latencyMode: 'realtime',
-        hardwareAcceleration: 'prefer-hardware'
+        hardwareAcceleration: resolved.hardwareAcceleration
       }
 
       // H.264 特定配置
@@ -282,8 +395,44 @@ export function useWebCodecs() {
     }
   }
 
+  // 探测解码该 codec/分辨率能否硬件解码，不行再探测能否软件解码；两者都不支持时返回 null，
+  // 调用方需要据此提醒用户（否则会直接黑屏且没有任何提示）。结果按 codec+分辨率缓存，
+  // 避免同一路流后续每个关键帧的 config 消息都重新探测一次
+  const decoderHwPrefCache = new Map<string, HardwareAcceleration | null>()
+  async function resolveDecoderHardwareAcceleration(
+    codec: string,
+    width: number,
+    height: number,
+    description?: BufferSource
+  ): Promise<HardwareAcceleration | null> {
+    const cacheKey = `${codec}:${width}x${height}`
+    const cached = decoderHwPrefCache.get(cacheKey)
+    if (cached !== undefined) return cached
+
+    let resolved: HardwareAcceleration | null = null
+    for (const preference of ['prefer-hardware', 'prefer-software'] as const) {
+      try {
+        const result = await VideoDecoder.isConfigSupported({
+          codec,
+          codedWidth: width,
+          codedHeight: height,
+          description,
+          hardwareAcceleration: preference
+        })
+        if (result.supported) {
+          resolved = preference
+          break
+        }
+      } catch {
+        // 继续尝试下一个 preference
+      }
+    }
+    decoderHwPrefCache.set(cacheKey, resolved)
+    return resolved
+  }
+
   // 处理接收到的编码数据
-  function decodeFrame(frameData: EncodedFrameData) {
+  async function decodeFrame(frameData: EncodedFrameData) {
     if (!decoder.value) {
       logger.warn('Decoder not initialized')
       return
@@ -298,17 +447,35 @@ export function useWebCodecs() {
         return
       }
 
+      const description = frameData.data.byteLength > 0 ? new Uint8Array(frameData.data) : undefined
+      const hardwareAcceleration = await resolveDecoderHardwareAcceleration(frameData.codec, frameData.width, frameData.height, description)
+      if (!decoder.value) return // 探测期间解码器可能已被停止
+
+      if (hardwareAcceleration === null) {
+        error.value = `当前浏览器/硬件不支持解码 ${frameData.codec}（${frameData.width}x${frameData.height}），画面无法显示`
+        logger.error(error.value)
+        return
+      }
+
+      if (hardwareAcceleration === 'prefer-software') {
+        hardwareFallback.value = '解码器未检测到可用硬件加速，已切换为软件解码，可能增加 CPU 占用'
+        logger.warn(hardwareFallback.value)
+      }
+
       decoderConfig = {
         codec: frameData.codec,
         codedWidth: frameData.width,
         codedHeight: frameData.height,
-        description: frameData.data.byteLength > 0 ? new Uint8Array(frameData.data) : undefined
+        description,
+        hardwareAcceleration
       }
 
       try {
         decoder.value.configure(decoderConfig)
-        logger.log(`Decoder configured: ${frameData.codec} ${frameData.width}x${frameData.height}`)
+        error.value = null
+        logger.log(`Decoder configured: ${frameData.codec} ${frameData.width}x${frameData.height} (${hardwareAcceleration})`)
       } catch (err) {
+        error.value = `解码器初始化失败: ${(err as Error).message}，画面无法显示`
         logger.error('Decoder config error:', err)
       }
       return
@@ -428,14 +595,17 @@ export function useWebCodecs() {
     isEncoding,
     isDecoding,
     error,
+    hardwareFallback,
     settings,
     checkCodecSupport,
     getSupportedCodecs,
+    resolveEncoderConfig,
     initEncoder,
     stopEncoder,
     requestKeyFrame,
     initDecoder,
     decodeFrame,
+    resolveDecoderHardwareAcceleration,
     stopDecoder,
     serializeFrame,
     deserializeFrame

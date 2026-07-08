@@ -22,6 +22,8 @@ export function useConferenceWebCodecs() {
   const serializeFrame = baseCodecs.serializeFrame
   const deserializeFrame = baseCodecs.deserializeFrame
   const isEncoding = baseCodecs.isEncoding
+  const hardwareFallback = baseCodecs.hardwareFallback
+  const error = baseCodecs.error
 
   // 为特定共享者初始化解码器
   async function initDecoderForSharer(
@@ -52,7 +54,7 @@ export function useConferenceWebCodecs() {
   }
 
   // 为特定共享者解码帧
-  function decodeFrameForSharer(sharerId: string, frameData: EncodedFrameData) {
+  async function decodeFrameForSharer(sharerId: string, frameData: EncodedFrameData) {
     const decoder = decoders.get(sharerId)
     if (!decoder) {
       return
@@ -65,19 +67,37 @@ export function useConferenceWebCodecs() {
         return
       }
 
+      const description = frameData.data.byteLength > 0 ? new Uint8Array(frameData.data) : undefined
+      const hardwareAcceleration = await baseCodecs.resolveDecoderHardwareAcceleration(frameData.codec, frameData.width, frameData.height, description)
+      if (!decoders.has(sharerId)) return // 探测期间该共享者的解码器可能已被停止
+
+      if (hardwareAcceleration === null) {
+        error.value = `共享者 ${sharerId} 的画面无法显示：当前浏览器/硬件不支持解码 ${frameData.codec}（${frameData.width}x${frameData.height}）`
+        logger.error(error.value)
+        return
+      }
+
+      if (hardwareAcceleration === 'prefer-software') {
+        hardwareFallback.value = '解码器未检测到可用硬件加速，已切换为软件解码，可能增加 CPU 占用'
+        logger.warn(hardwareFallback.value)
+      }
+
       const config: VideoDecoderConfig = {
         codec: frameData.codec,
         codedWidth: frameData.width,
         codedHeight: frameData.height,
-        description: frameData.data.byteLength > 0 ? new Uint8Array(frameData.data) : undefined
+        description,
+        hardwareAcceleration
       }
 
       decoderConfigs.set(sharerId, config)
 
       try {
         decoder.configure(config)
-        logger.log(`Decoder configured for sharer ${sharerId}: ${frameData.codec} ${frameData.width}x${frameData.height}`)
+        error.value = null
+        logger.log(`Decoder configured for sharer ${sharerId}: ${frameData.codec} ${frameData.width}x${frameData.height} (${hardwareAcceleration})`)
       } catch (err) {
+        error.value = `共享者 ${sharerId} 的画面无法显示：解码器初始化失败（${(err as Error).message}）`
         logger.error(`Decoder config error for sharer ${sharerId}:`, err)
       }
       return
@@ -145,6 +165,8 @@ export function useConferenceWebCodecs() {
     serializeFrame,
     deserializeFrame,
     isEncoding,
+    hardwareFallback,
+    error,
     // 多解码器管理
     activeDecoders,
     initDecoderForSharer,

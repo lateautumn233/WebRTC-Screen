@@ -18,19 +18,40 @@
           <button
             v-for="codec in codecs"
             :key="codec.value"
-            :disabled="!codec.supported || disabled"
+            :disabled="disabled"
             :class="[
               'py-1.5 rounded-md text-xs transition-colors',
               modelValue.codec === codec.value
                 ? `${accentBg} text-white font-semibold`
                 : codec.supported
                   ? 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
-                  : 'bg-white/5 text-slate-600 cursor-not-allowed'
+                  : 'bg-white/5 text-slate-600 hover:bg-white/10 hover:text-slate-400'
             ]"
             @click="updateSetting('codec', codec.value)"
           >
             {{ codec.label }}
           </button>
+        </div>
+
+        <!-- 当前选中组合不受支持 -->
+        <div
+          v-if="unsupportedError"
+          class="mt-2 flex items-start gap-2 px-2.5 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs"
+        >
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span>{{ unsupportedError }}</span>
+        </div>
+        <!-- 当前选中组合仅支持软件编码 -->
+        <div
+          v-else-if="softwareFallbackWarning"
+          class="mt-2 flex items-start gap-2 px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs"
+        >
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <span>{{ softwareFallbackWarning }}</span>
         </div>
       </div>
 
@@ -141,19 +162,50 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   'update:modelValue': [value: EncoderSettings]
+  /** 当前选中的编码器/分辨率/帧率组合是否可用（硬件或软件任一支持） */
+  'update:supported': [supported: boolean]
 }>()
 
-const { getSupportedCodecs } = useWebCodecs()
+const { resolveEncoderConfig } = useWebCodecs()
 
 const accentBg = computed(() => props.accent === 'violet' ? 'bg-violet-500' : 'bg-indigo-500')
 
-const codecs = ref<{ value: CodecType; label: string; supported: boolean }[]>([
-  { value: 'h264', label: 'H.264', supported: false },
-  { value: 'hevc', label: 'HEVC', supported: false },
-  { value: 'vp8', label: 'VP8', supported: false },
-  { value: 'vp9', label: 'VP9', supported: false },
-  { value: 'av1', label: 'AV1', supported: false }
+interface CodecStatus {
+  value: CodecType
+  label: string
+  supported: boolean
+  hardwareAcceleration: HardwareAcceleration | null
+}
+
+const codecs = ref<CodecStatus[]>([
+  { value: 'h264', label: 'H.264', supported: false, hardwareAcceleration: null },
+  { value: 'hevc', label: 'HEVC', supported: false, hardwareAcceleration: null },
+  { value: 'vp8', label: 'VP8', supported: false, hardwareAcceleration: null },
+  { value: 'vp9', label: 'VP9', supported: false, hardwareAcceleration: null },
+  { value: 'av1', label: 'AV1', supported: false, hardwareAcceleration: null }
 ])
+
+const selectedCodec = computed(() => codecs.value.find((c) => c.value === props.modelValue.codec) ?? null)
+
+// 当前选中组合硬件/软件均不支持：提醒用户并阻止开始共享
+const unsupportedError = computed(() => {
+  const c = selectedCodec.value
+  return c && !c.supported
+    ? `${c.label} 在当前分辨率/帧率组合下不受硬件或软件编码支持，请更换编码器或调整分辨率/帧率`
+    : null
+})
+
+// 当前选中组合只能用软件编码：提醒用户但不阻止
+const softwareFallbackWarning = computed(() => {
+  const c = selectedCodec.value
+  return c && c.supported && c.hardwareAcceleration === 'prefer-software'
+    ? `${c.label} 未检测到可用硬件编码器，将使用软件编码，可能增加 CPU 占用`
+    : null
+})
+
+watch(unsupportedError, (err) => {
+  emit('update:supported', !err)
+}, { immediate: true })
 
 const resolutions: { value: ResolutionPreset; label: string }[] = [
   { value: '720p', label: '720p' },
@@ -173,18 +225,31 @@ function updateSetting<K extends keyof EncoderSettings>(key: K, value: EncoderSe
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
-// 探测使用当前选择的分辨率/帧率，而不是固定值，避免"支持"标记与实际配置不符
+// 探测使用当前选择的分辨率/帧率，而不是固定值，避免"支持"标记与实际配置不符。
+// “原始”分辨率此时还没有捕获流拿不到 trackSettings，用屏幕物理分辨率估算，
+// 比固定 1920x1080 更接近真实编码时的分辨率（如高分屏用户）
+function estimateOriginalResolution() {
+  const ratio = window.devicePixelRatio || 1
+  return {
+    width: Math.round(window.screen.width * ratio),
+    height: Math.round(window.screen.height * ratio)
+  }
+}
+
+// 每个编解码器都探测一次实际能否用于当前分辨率/帧率，以及是硬件还是软件回退，
+// 供编码器网格的可选/禁用状态，以及当前选中项的提醒条使用
 async function refreshCodecSupport() {
-  const resolution = RESOLUTION_MAP[props.modelValue.resolution]
-  const supported = await getSupportedCodecs(
-    resolution?.width ?? 1920,
-    resolution?.height ?? 1080,
-    props.modelValue.framerate
+  const resolution = RESOLUTION_MAP[props.modelValue.resolution] ?? estimateOriginalResolution()
+  codecs.value = await Promise.all(
+    codecs.value.map(async (c) => {
+      const resolved = await resolveEncoderConfig(c.value, resolution.width, resolution.height, props.modelValue.framerate)
+      return {
+        ...c,
+        supported: resolved !== null,
+        hardwareAcceleration: resolved?.hardwareAcceleration ?? null
+      }
+    })
   )
-  codecs.value = codecs.value.map((c) => ({
-    ...c,
-    supported: supported.includes(c.value)
-  }))
 }
 
 onMounted(refreshCodecSupport)

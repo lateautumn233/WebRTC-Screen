@@ -14,14 +14,35 @@
           :placeholder="videoPlaceholder"
         />
 
+        <!-- 编/解码错误提示（如画面无法解码而黑屏时，告知具体原因） -->
+        <div
+          v-if="webcodecs.error.value"
+          class="flex items-start gap-2 px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs"
+        >
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <span>{{ webcodecs.error.value }}</span>
+        </div>
+        <!-- 硬件编/解码回退提示 -->
+        <div
+          v-else-if="webcodecs.hardwareFallback.value"
+          class="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs"
+        >
+          <svg class="w-4 h-4 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+          </svg>
+          <span>{{ webcodecs.hardwareFallback.value }}</span>
+        </div>
+
         <!-- 控制按钮 -->
         <div class="flex flex-wrap gap-3">
           <!-- 主持人控制 -->
           <template v-if="isHost">
             <button
               v-if="!isStreaming"
-              :disabled="!isInRoom"
-              :class="isInRoom ? 'glow-primary' : ''"
+              :disabled="!isInRoom || !encoderSupported"
+              :class="isInRoom && encoderSupported ? 'glow-primary' : ''"
               class="flex items-center gap-2 px-6 py-2.5 bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors"
               @click="startSharing"
             >
@@ -80,6 +101,7 @@
           v-if="isHost || !isInRoom"
           v-model="encoderSettings"
           :disabled="isStreaming"
+          @update:supported="encoderSupported = $event"
         />
 
         <!-- 连接信息 -->
@@ -126,6 +148,8 @@ const roomPanel = ref<InstanceType<typeof RoomPanel> | null>(null)
 const encoderSettings = ref<EncoderSettings>(loadSettings())
 const isStreaming = ref(false)
 const isReceiving = ref(false)
+// 当前编码设置组合是否可用（硬件或软件任一支持），由 SettingsPanel 探测后上报
+const encoderSupported = ref(true)
 let pingInterval: ReturnType<typeof setInterval> | null = null
 
 // 监听设置变化，自动保存到 localStorage
