@@ -22,8 +22,9 @@ export function useScreenCapture() {
       // 约束捕获分辨率：让浏览器在原生捕获/GPU 回读阶段就降采样，
       // 避免高分屏在原始分辨率下回读带宽不足导致实际交付帧率跟不上协商的高帧率
       if (resolution) {
-        videoConstraints.width = { ideal: resolution.width }
-        videoConstraints.height = { ideal: resolution.height }
+        videoConstraints.width = { ideal: resolution.width, max: resolution.width }
+        videoConstraints.height = { ideal: resolution.height, max: resolution.height }
+        videoConstraints.aspectRatio = { ideal: resolution.width / resolution.height }
       }
 
       const displayMediaOptions: DisplayMediaStreamOptions = {

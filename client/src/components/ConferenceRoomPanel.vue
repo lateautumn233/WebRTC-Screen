@@ -182,8 +182,7 @@ function displayName(p: { id: string; username?: string }) {
 }
 
 function avatarText(p: { id: string; username?: string }) {
-  if (p.id === props.roomState.myId) return '我'
-  return (p.username || p.id).charAt(0).toUpperCase()
+  return displayName(p).charAt(0).toUpperCase()
 }
 
 onMounted(() => {
