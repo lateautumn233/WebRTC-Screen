@@ -27,16 +27,22 @@ export function useWebCodecs() {
   // 解码延迟测量：帧 timestamp -> performance.now()
   const decodeStartTimes = new Map<number, number>()
 
-  // 检查编解码器支持
-  async function checkCodecSupport(codec: CodecType): Promise<boolean> {
+  // 检查编解码器支持，探测时使用调用方实际打算使用的分辨率/帧率组合，
+  // 避免固定 1080p@30fps 探测结果与用户真实配置（如 120fps）不一致
+  async function checkCodecSupport(
+    codec: CodecType,
+    width = 1920,
+    height = 1080,
+    framerate = 30
+  ): Promise<boolean> {
     const codecString = CODEC_MAP[codec]
     try {
       const result = await VideoEncoder.isConfigSupported({
         codec: codecString,
-        width: 1920,
-        height: 1080,
+        width,
+        height,
         bitrate: 4_000_000,
-        framerate: 30
+        framerate
       })
       return result.supported ?? false
     } catch {
@@ -45,12 +51,12 @@ export function useWebCodecs() {
   }
 
   // 获取支持的编解码器列表
-  async function getSupportedCodecs(): Promise<CodecType[]> {
+  async function getSupportedCodecs(width = 1920, height = 1080, framerate = 30): Promise<CodecType[]> {
     const codecs: CodecType[] = ['h264', 'hevc', 'vp8', 'vp9', 'av1']
     const supported: CodecType[] = []
 
     for (const codec of codecs) {
-      if (await checkCodecSupport(codec)) {
+      if (await checkCodecSupport(codec, width, height, framerate)) {
         supported.push(codec)
       }
     }

@@ -122,8 +122,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { EncoderSettings, CodecType, ResolutionPreset, FrameratePreset, BitrateMode } from '../types'
+import { RESOLUTION_MAP } from '../types'
 import { useWebCodecs } from '../composables/useWebCodecs'
 
 interface Props {
@@ -172,11 +173,21 @@ function updateSetting<K extends keyof EncoderSettings>(key: K, value: EncoderSe
   emit('update:modelValue', { ...props.modelValue, [key]: value })
 }
 
-onMounted(async () => {
-  const supported = await getSupportedCodecs()
+// 探测使用当前选择的分辨率/帧率，而不是固定值，避免"支持"标记与实际配置不符
+async function refreshCodecSupport() {
+  const resolution = RESOLUTION_MAP[props.modelValue.resolution]
+  const supported = await getSupportedCodecs(
+    resolution?.width ?? 1920,
+    resolution?.height ?? 1080,
+    props.modelValue.framerate
+  )
   codecs.value = codecs.value.map((c) => ({
     ...c,
     supported: supported.includes(c.value)
   }))
-})
+}
+
+onMounted(refreshCodecSupport)
+
+watch(() => [props.modelValue.resolution, props.modelValue.framerate], refreshCodecSupport)
 </script>
