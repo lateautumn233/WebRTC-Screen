@@ -2,14 +2,12 @@
   "name": "screen-share-demo",
   "version": "1.0.0",
   "description": "WebRTC + WebCodecs Screen Sharing Tool",
+  "packageManager": "pnpm@10.28.2",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:client": "cd client && npm run dev",
-    "dev:server": "cd server && npm run dev",
-    "build": "cd client && npm run build",
-    "install:all": "npm install && cd client && npm install && cd ../server && npm install"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "dev": "pnpm --parallel -r run dev",
+    "dev:client": "pnpm --filter client dev",
+    "dev:server": "pnpm --filter screen-share-server dev",
+    "build": "pnpm --filter client build",
+    "install:all": "pnpm install"
   }
 }

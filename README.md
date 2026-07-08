@@ -140,25 +140,25 @@ webrtc-share/
 ### 环境要求
 
 - **Node.js** >= 18
-- **npm** >= 9
+- **pnpm** >= 10（`npm install -g pnpm` 安装）
 - **浏览器**: Chrome 94+ 或 Edge 94+
 
 ### 1. 安装依赖
 
 ```bash
-# 一键安装所有依赖（根目录 + client + server）
-npm run install:all
+# pnpm workspace 一键安装所有依赖（client + server）
+pnpm install
 ```
 
 ### 2. 启动开发服务
 
 ```bash
 # 同时启动客户端和信令服务器
-npm run dev
+pnpm dev
 
 # 或分别启动
-npm run dev:client    # Vite 开发服务器 → http://localhost:5173
-npm run dev:server    # 信令服务器 → http://localhost:3000
+pnpm dev:client    # Vite 开发服务器 → http://localhost:5173
+pnpm dev:server    # 信令服务器 → http://localhost:3000
 ```
 
 ### 3. 使用方式
@@ -209,10 +209,10 @@ npm run dev:server    # 信令服务器 → http://localhost:3000
 
 ```bash
 # 构建客户端（产物 → client/dist/）
-npm run build
+pnpm build
 
 # 构建服务端（产物 → server/dist/）
-cd server && npm run build
+pnpm --filter screen-share-server build
 ```
 
 #### 2. 配置信令服务器地址
@@ -225,7 +225,7 @@ VITE_SIGNALING_SERVER=https://your-server.com
 或在构建时指定：
 
 ```bash
-VITE_SIGNALING_SERVER=https://your-server.com npm run build
+VITE_SIGNALING_SERVER=https://your-server.com pnpm build
 ```
 
 #### 3. Nginx 配置示例
