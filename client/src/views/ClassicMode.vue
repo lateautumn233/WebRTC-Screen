@@ -1,8 +1,8 @@
 <template>
   <main class="max-w-7xl mx-auto px-6 py-8">
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <!-- 左侧：视频区域 -->
-      <div class="lg:col-span-2 space-y-6">
+      <div class="lg:col-span-2 space-y-4">
         <!-- 视频播放器 -->
         <VideoPlayer
           ref="videoPlayer"
@@ -21,7 +21,8 @@
             <button
               v-if="!isStreaming"
               :disabled="!isInRoom"
-              class="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-xl font-medium transition-colors"
+              :class="isInRoom ? 'glow-primary' : ''"
+              class="flex items-center gap-2 px-6 py-2.5 bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors"
               @click="startSharing"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -31,7 +32,7 @@
             </button>
             <button
               v-else
-              class="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-medium transition-colors"
+              class="flex items-center gap-2 px-6 py-2.5 bg-rose-500 hover:bg-rose-400 text-white rounded-xl font-semibold transition-colors"
               @click="stopSharing"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,7 +47,7 @@
           <template v-if="isViewer">
             <button
               v-if="!isReceiving && hasHost"
-              class="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 rounded-xl font-medium transition-colors"
+              class="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold transition-colors"
               @click="requestStream"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -55,7 +56,7 @@
               </svg>
               请求观看
             </button>
-            <div v-else-if="!hasHost" class="text-gray-400 text-sm py-3">
+            <div v-else-if="!hasHost" class="text-slate-500 text-sm py-3">
               等待主持人加入...
             </div>
           </template>
@@ -63,7 +64,7 @@
       </div>
 
       <!-- 右侧：设置面板 -->
-      <div class="space-y-6">
+      <div class="space-y-4">
         <!-- 房间面板 -->
         <RoomPanel
           ref="roomPanel"
@@ -82,16 +83,16 @@
         />
 
         <!-- 连接信息 -->
-        <div v-if="isInRoom" class="bg-gray-900 rounded-xl p-6 shadow-lg">
-          <h3 class="text-lg font-semibold text-white mb-4">连接状态</h3>
-          <div class="space-y-2 text-sm">
+        <div v-if="isInRoom" class="surface rounded-2xl p-5">
+          <h3 class="font-semibold text-slate-100 mb-4">连接状态</h3>
+          <div class="space-y-2.5 text-sm">
             <div class="flex justify-between">
-              <span class="text-gray-400">WebRTC 状态</span>
+              <span class="text-slate-500">WebRTC 状态</span>
               <span :class="connectionStateClass">{{ connectionStateText }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">连接数</span>
-              <span class="text-white">{{ webrtc.getConnectionCount() }}</span>
+              <span class="text-slate-500">连接数</span>
+              <span class="text-slate-200">{{ webrtc.getConnectionCount() }}</span>
             </div>
           </div>
         </div>
@@ -173,13 +174,13 @@ const connectionStateText = computed(() => {
 const connectionStateClass = computed(() => {
   switch (webrtc.connectionState.value) {
     case 'connected':
-      return 'text-green-400'
+      return 'text-emerald-300'
     case 'connecting':
-      return 'text-yellow-400'
+      return 'text-amber-300'
     case 'failed':
-      return 'text-red-400'
+      return 'text-rose-300'
     default:
-      return 'text-gray-400'
+      return 'text-slate-500'
   }
 })
 

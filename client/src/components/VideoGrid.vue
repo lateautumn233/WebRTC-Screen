@@ -1,7 +1,7 @@
 <template>
   <div class="grid gap-4" :class="gridClass">
     <!-- 自己的共享预览 -->
-    <div v-if="localStream" class="relative bg-black rounded-xl overflow-hidden aspect-video">
+    <div v-if="localStream" class="relative surface rounded-2xl overflow-hidden aspect-video bg-black">
       <video
         ref="localVideoRef"
         autoplay
@@ -9,7 +9,7 @@
         playsinline
         class="w-full h-full object-contain"
       ></video>
-      <div class="absolute top-2 left-2 px-2 py-1 bg-blue-600 rounded text-xs text-white font-medium">
+      <div class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-sky-500/90 text-[11px] text-white font-semibold">
         我的共享
       </div>
     </div>
@@ -19,7 +19,7 @@
       v-for="sharer in remoteSharers"
       :key="sharer.id"
       :ref="(el) => setContainerRef(sharer.id, el as HTMLElement)"
-      class="relative bg-black rounded-xl overflow-hidden"
+      class="relative surface rounded-2xl overflow-hidden"
       :class="[
         isFullscreenSharer === sharer.id || isPageFullscreenSharer === sharer.id
           ? 'fixed inset-0 z-50 rounded-none'
@@ -27,7 +27,7 @@
       ]"
     >
       <div
-        class="bg-gray-900 flex items-center justify-center"
+        class="bg-black flex items-center justify-center"
         :class="(isFullscreenSharer === sharer.id || isPageFullscreenSharer === sharer.id) ? 'w-full h-full' : 'aspect-video'"
       >
         <canvas
@@ -37,16 +37,16 @@
       </div>
 
       <!-- 标签 -->
-      <div class="absolute top-2 left-2 px-2 py-1 bg-green-600 rounded text-xs text-white font-medium">
+      <div class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-500/90 text-[11px] text-white font-semibold">
         {{ sharer.label || sharer.id.substring(0, 8) }}
       </div>
 
       <!-- 全屏按钮组 -->
-      <div class="absolute top-2 right-2 flex gap-2">
+      <div class="absolute top-2.5 right-2.5 flex gap-1.5">
         <!-- 统计信息切换按钮 -->
         <button
           @click="showStats = !showStats"
-          class="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+          class="p-1.5 bg-black/55 hover:bg-black/75 rounded-md text-slate-200 transition-colors"
           :title="showStats ? '隐藏统计信息' : '显示统计信息'"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -57,7 +57,7 @@
         <!-- 网页全屏按钮 -->
         <button
           @click="togglePageFullscreen(sharer.id)"
-          class="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+          class="p-1.5 bg-black/55 hover:bg-black/75 rounded-md text-slate-200 transition-colors"
           :title="isPageFullscreenSharer === sharer.id ? '退出网页全屏' : '网页全屏'"
         >
           <svg v-if="isPageFullscreenSharer !== sharer.id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,7 +70,7 @@
         <!-- 浏览器全屏按钮 -->
         <button
           @click="toggleFullscreen(sharer.id)"
-          class="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+          class="p-1.5 bg-black/55 hover:bg-black/75 rounded-md text-slate-200 transition-colors"
           :title="isFullscreenSharer === sharer.id ? '退出全屏' : '全屏播放'"
         >
           <svg v-if="isFullscreenSharer !== sharer.id" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,26 +85,26 @@
       <!-- 全屏退出提示 -->
       <div
         v-if="isFullscreenSharer === sharer.id || isPageFullscreenSharer === sharer.id"
-        class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded text-white text-xs opacity-0 hover:opacity-100 transition-opacity"
+        class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/55 px-3 py-1 rounded-md text-slate-200 text-xs opacity-0 hover:opacity-100 transition-opacity"
       >
         {{ isFullscreenSharer === sharer.id ? '按 ESC 退出全屏' : '点击按钮退出网页全屏' }}
       </div>
 
-      <!-- 统计信息 -->
+      <!-- 统计信息：半透明纯色，无 backdrop-filter，避免视频区 GPU 合成开销 -->
       <div
         v-if="showStats && sharerStats.get(sharer.id) && isFullscreenSharer !== sharer.id && isPageFullscreenSharer !== sharer.id"
-        class="absolute bottom-2 left-2 right-2"
+        class="absolute bottom-2.5 left-2.5 right-2.5"
       >
-        <div class="bg-black/70 backdrop-blur rounded-lg px-3 py-2 space-y-1.5">
+        <div class="bg-black/55 rounded-lg px-3 py-2 space-y-1.5">
           <!-- 第一行：媒体信息 -->
           <div class="flex items-center gap-3 text-xs">
             <div class="flex items-center gap-1">
-              <span class="text-gray-500">分辨率</span>
-              <span class="text-white font-medium">{{ sharerStats.get(sharer.id)?.resolution }}</span>
+              <span class="text-slate-500">分辨率</span>
+              <span class="text-slate-200 font-medium">{{ sharerStats.get(sharer.id)?.resolution }}</span>
             </div>
             <div class="flex items-center gap-1">
-              <span class="text-gray-500">编解码器</span>
-              <span class="text-purple-400 font-medium">{{ sharerStats.get(sharer.id)?.codec }}</span>
+              <span class="text-slate-500">编解码器</span>
+              <span class="text-violet-300 font-medium">{{ sharerStats.get(sharer.id)?.codec }}</span>
             </div>
           </div>
           <!-- 分隔线 -->
@@ -112,24 +112,24 @@
           <!-- 第二行：性能指标 -->
           <div class="grid grid-cols-3 sm:grid-cols-5 gap-1 text-xs">
             <div class="flex flex-col">
-              <span class="text-gray-500">帧率</span>
-              <span class="text-green-400 font-medium">{{ sharerStats.get(sharer.id)?.fps }} fps</span>
+              <span class="text-slate-500">帧率</span>
+              <span class="text-emerald-300 font-medium">{{ sharerStats.get(sharer.id)?.fps }} fps</span>
             </div>
             <div class="flex flex-col">
-              <span class="text-gray-500">码率</span>
-              <span class="text-blue-400 font-medium">{{ sharerStats.get(sharer.id)?.bitrate }}</span>
+              <span class="text-slate-500">码率</span>
+              <span class="text-sky-300 font-medium">{{ sharerStats.get(sharer.id)?.bitrate }}</span>
             </div>
             <div class="flex flex-col">
-              <span class="text-gray-500">编码</span>
-              <span class="text-yellow-400 font-medium">{{ sharerStats.get(sharer.id)?.encodeLatency }}</span>
+              <span class="text-slate-500">编码</span>
+              <span class="text-amber-300 font-medium">{{ sharerStats.get(sharer.id)?.encodeLatency }}</span>
             </div>
             <div class="flex flex-col">
-              <span class="text-gray-500">解码</span>
-              <span class="text-orange-400 font-medium">{{ sharerStats.get(sharer.id)?.decodeLatency }}</span>
+              <span class="text-slate-500">解码</span>
+              <span class="text-orange-300 font-medium">{{ sharerStats.get(sharer.id)?.decodeLatency }}</span>
             </div>
             <div class="flex flex-col">
-              <span class="text-gray-500">网络</span>
-              <span class="text-rose-400 font-medium">{{ sharerStats.get(sharer.id)?.networkLatency }}</span>
+              <span class="text-slate-500">网络</span>
+              <span class="text-rose-300 font-medium">{{ sharerStats.get(sharer.id)?.networkLatency }}</span>
             </div>
           </div>
         </div>
@@ -145,10 +145,10 @@
     <!-- 空状态 -->
     <div
       v-if="!localStream && remoteSharers.length === 0"
-      class="col-span-full flex items-center justify-center aspect-video bg-gray-900 rounded-xl"
+      class="col-span-full flex items-center justify-center aspect-video surface rounded-2xl"
     >
-      <div class="text-gray-500 flex flex-col items-center gap-2">
-        <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="text-slate-500 flex flex-col items-center gap-2">
+        <svg class="w-14 h-14 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
         </svg>
         <span class="text-sm">{{ placeholder }}</span>

@@ -1,59 +1,58 @@
 <template>
-  <div class="bg-gray-900 rounded-xl p-6 shadow-lg">
-    <h3 class="text-lg font-semibold text-white mb-4">会议房间</h3>
-
-    <!-- 连接状态 -->
-    <div class="flex items-center gap-2 mb-4">
-      <div
+  <div class="surface rounded-2xl p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-semibold text-slate-100">会议房间</h3>
+      <!-- 连接状态 -->
+      <span
         :class="[
-          'w-2 h-2 rounded-full',
-          connected ? 'bg-green-500' : 'bg-red-500'
+          'text-xs flex items-center gap-1.5',
+          connected ? 'text-emerald-300' : 'text-rose-300'
         ]"
-      ></div>
-      <span class="text-sm text-gray-400">
+      >
+        <span :class="['w-1.5 h-1.5 rounded-full', connected ? 'bg-emerald-400' : 'bg-rose-400']"></span>
         {{ connected ? '已连接信令服务器' : '未连接' }}
       </span>
     </div>
 
     <!-- 用户名输入 -->
-    <div class="mb-4">
-      <label class="block text-sm font-medium text-gray-300 mb-2">用户名</label>
+    <div class="mb-3">
+      <label class="block text-xs text-slate-500 mb-1.5">用户名</label>
       <input
         v-model="usernameInput"
         type="text"
         placeholder="输入用户名"
         :disabled="inRoom"
-        class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
+        class="w-full px-3.5 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-200 placeholder-slate-600 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/25 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition"
         @input="onUsernameChange"
       />
     </div>
 
     <!-- 房间号输入 -->
     <div class="mb-4 relative">
-      <label class="block text-sm font-medium text-gray-300 mb-2">房间号</label>
+      <label class="block text-xs text-slate-500 mb-1.5">房间号</label>
       <input
         v-model="roomIdInput"
         type="text"
         placeholder="输入房间号"
         :disabled="inRoom"
-        class="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent disabled:opacity-50"
+        class="w-full px-3.5 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-200 font-mono placeholder-slate-600 focus:border-violet-400 focus:ring-2 focus:ring-violet-500/25 outline-none disabled:opacity-50 disabled:cursor-not-allowed transition"
         @focus="showHistory = true"
         @blur="hideHistory"
       />
       <!-- 房间历史下拉 -->
       <div
         v-if="showHistory && !inRoom && roomHistory.length > 0"
-        class="absolute z-10 w-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+        class="absolute z-10 w-full mt-1.5 rounded-lg bg-[#0c1122] border border-white/10 shadow-xl shadow-black/50 max-h-40 overflow-y-auto"
       >
         <div
           v-for="room in roomHistory"
           :key="room"
-          class="flex items-center justify-between px-4 py-2 hover:bg-gray-700 cursor-pointer"
+          class="group flex items-center justify-between px-3.5 py-2 hover:bg-white/5 cursor-pointer"
           @mousedown.prevent="selectRoom(room)"
         >
-          <span class="text-white text-sm font-mono">{{ room }}</span>
+          <span class="text-slate-200 text-sm font-mono">{{ room }}</span>
           <button
-            class="text-gray-500 hover:text-red-400 text-xs"
+            class="text-slate-600 group-hover:text-rose-400 text-xs transition-colors"
             @mousedown.prevent.stop="removeHistory(room)"
           >
             删除
@@ -66,7 +65,7 @@
     <div v-if="!inRoom">
       <button
         :disabled="!connected || !roomIdInput.trim()"
-        class="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+        class="w-full py-2 rounded-lg bg-violet-500 hover:bg-violet-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
         @click="handleJoin"
       >
         加入会议
@@ -75,31 +74,41 @@
 
     <!-- 房间信息 -->
     <div v-else class="space-y-3">
-      <div class="bg-gray-800 rounded-lg p-4">
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-gray-400">房间号</span>
-          <span class="text-white font-mono">{{ roomState.roomId }}</span>
+      <div class="rounded-xl bg-black/25 border border-white/10 p-4 text-sm">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-slate-500">房间号</span>
+          <span class="text-slate-200 font-mono">{{ roomState.roomId }}</span>
         </div>
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-gray-400">参与者</span>
-          <span class="text-white">{{ roomState.participants.length }} 人</span>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-500">参与者</span>
+          <span class="text-slate-200">{{ roomState.participants.length }} 人</span>
         </div>
 
         <!-- 参与者列表 -->
-        <div class="mt-3 pt-3 border-t border-gray-700">
-          <div class="text-xs text-gray-500 mb-2">参与者列表</div>
-          <div class="space-y-1 max-h-40 overflow-y-auto">
+        <div class="mt-3 pt-3 border-t border-white/10">
+          <div class="text-xs text-slate-600 mb-2">参与者列表</div>
+          <div class="space-y-1 max-h-44 overflow-y-auto">
             <div
               v-for="p in roomState.participants"
               :key="p.id"
               class="flex items-center justify-between text-sm py-1"
             >
-              <span class="text-gray-300 truncate">
-                {{ p.id === roomState.myId ? '我' : (p.username || p.id.substring(0, 8)) }}
+              <span class="text-slate-300 flex items-center gap-2 truncate">
+                <span
+                  :class="[
+                    'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0',
+                    p.id === roomState.myId
+                      ? 'bg-sky-500/20 text-sky-300'
+                      : 'bg-violet-500/20 text-violet-300'
+                  ]"
+                >
+                  {{ avatarText(p) }}
+                </span>
+                <span class="truncate">{{ displayName(p) }}</span>
               </span>
               <span
                 v-if="p.isSharing && p.id !== roomState.myId && watchingSharers.includes(p.id)"
-                class="px-2 py-0.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs cursor-pointer transition-colors"
+                class="px-2.5 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium cursor-pointer transition-colors shrink-0"
                 @click="emit('stopWatch', p.id)"
                 title="点击取消观看"
               >
@@ -107,24 +116,25 @@
               </span>
               <button
                 v-else-if="p.isSharing && p.id !== roomState.myId && availableSharers.includes(p.id)"
-                class="px-2 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs transition-colors"
+                class="px-2.5 py-0.5 rounded-md bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium transition-colors shrink-0"
                 @click="emit('watch', p.id)"
               >
                 观看
               </button>
               <span
                 v-else-if="p.isSharing"
-                class="px-2 py-0.5 bg-red-600/20 text-red-400 rounded text-xs"
+                class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 text-xs shrink-0"
               >
                 共享中
               </span>
+              <span v-else class="text-xs text-slate-600 shrink-0">未共享</span>
             </div>
           </div>
         </div>
       </div>
 
       <button
-        class="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+        class="w-full py-2 rounded-lg border border-rose-500/40 text-rose-300 text-sm font-semibold hover:bg-rose-500/10 transition-colors"
         @click="handleLeave"
       >
         离开会议
@@ -132,8 +142,8 @@
     </div>
 
     <!-- 错误提示 -->
-    <div v-if="error" class="mt-4 p-3 bg-red-900/50 border border-red-700 rounded-lg">
-      <p class="text-red-400 text-sm">{{ error }}</p>
+    <div v-if="error" class="mt-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30">
+      <p class="text-rose-300 text-sm">{{ error }}</p>
     </div>
   </div>
 </template>
@@ -166,6 +176,15 @@ const showHistory = ref(false)
 const roomHistory = ref<string[]>([])
 
 const inRoom = computed(() => props.roomState.roomId !== null)
+
+function displayName(p: { id: string; username?: string }) {
+  return p.id === props.roomState.myId ? '我' : (p.username || p.id.substring(0, 8))
+}
+
+function avatarText(p: { id: string; username?: string }) {
+  if (p.id === props.roomState.myId) return '我'
+  return (p.username || p.id).charAt(0).toUpperCase()
+}
 
 onMounted(() => {
   usernameInput.value = loadUsername()

@@ -1,27 +1,27 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+  <div class="aurora min-h-screen text-slate-200">
     <!-- 头部 -->
-    <header class="border-b border-gray-700/50 backdrop-blur-sm bg-gray-900/50 sticky top-0 z-10">
-      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <header class="header-glass sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <router-link to="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="w-9 h-9 rounded-xl bg-indigo-500 flex items-center justify-center">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
           <div>
-            <h1 class="text-xl font-bold">Screen Share</h1>
-            <p class="text-xs text-gray-400">WebRTC + WebCodecs</p>
+            <h1 class="font-semibold tracking-tight text-slate-100">Screen Share</h1>
+            <p class="text-[11px] text-slate-500 -mt-0.5">WebRTC · WebCodecs</p>
           </div>
         </router-link>
 
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2">
           <!-- GitHub 链接 -->
           <a
             href="https://github.com/lateautumn233/WebRTC-Screen"
             target="_blank"
             rel="noopener noreferrer"
-            class="p-2 text-gray-400 hover:text-white transition-colors"
+            class="p-2 rounded-lg hover:bg-white/10 text-slate-400 transition-colors"
             title="GitHub"
           >
             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

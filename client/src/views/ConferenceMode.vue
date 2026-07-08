@@ -1,8 +1,8 @@
 <template>
   <main class="max-w-7xl mx-auto px-6 py-8">
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <!-- 左侧：视频网格区域 -->
-      <div class="lg:col-span-2 space-y-6">
+      <div class="lg:col-span-2 space-y-4">
         <!-- 视频网格 -->
         <VideoGrid
           ref="videoGrid"
@@ -16,7 +16,8 @@
           <button
             v-if="!isSharing"
             :disabled="!isInRoom"
-            class="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-xl font-medium transition-colors"
+            :class="isInRoom ? 'glow-violet' : ''"
+            class="flex items-center gap-2 px-6 py-2.5 bg-violet-500 hover:bg-violet-400 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-colors"
             @click="startSharing"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -26,7 +27,7 @@
           </button>
           <button
             v-else
-            class="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 rounded-xl font-medium transition-colors"
+            class="flex items-center gap-2 px-6 py-2.5 bg-rose-500 hover:bg-rose-400 text-white rounded-xl font-semibold transition-colors"
             @click="stopSharing"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,7 +40,7 @@
       </div>
 
       <!-- 右侧：设置面板 -->
-      <div class="space-y-6">
+      <div class="space-y-4">
         <!-- 房间面板 -->
         <ConferenceRoomPanel
           ref="roomPanel"
@@ -58,25 +59,26 @@
         <SettingsPanel
           v-model="encoderSettings"
           :disabled="isSharing"
+          accent="violet"
         />
 
         <!-- 连接信息 -->
-        <div v-if="isInRoom" class="bg-gray-900 rounded-xl p-6 shadow-lg">
-          <h3 class="text-lg font-semibold text-white mb-4">连接状态</h3>
-          <div class="space-y-2 text-sm">
+        <div v-if="isInRoom" class="surface rounded-2xl p-5">
+          <h3 class="font-semibold text-slate-100 mb-4">连接状态</h3>
+          <div class="space-y-2.5 text-sm">
             <div class="flex justify-between">
-              <span class="text-gray-400">WebRTC 连接数</span>
-              <span class="text-white">{{ webrtc.connectionCount.value }}</span>
+              <span class="text-slate-500">WebRTC 连接数</span>
+              <span class="text-slate-200">{{ webrtc.connectionCount.value }}</span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">正在共享</span>
-              <span :class="isSharing ? 'text-green-400' : 'text-gray-400'">
+              <span class="text-slate-500">正在共享</span>
+              <span :class="isSharing ? 'text-emerald-300' : 'text-slate-500'">
                 {{ isSharing ? '是' : '否' }}
               </span>
             </div>
             <div class="flex justify-between">
-              <span class="text-gray-400">共享者数量</span>
-              <span class="text-white">{{ (isSharing ? 1 : 0) + availableSharers.length }}</span>
+              <span class="text-slate-500">共享者数量</span>
+              <span class="text-slate-200">{{ (isSharing ? 1 : 0) + availableSharers.length }}</span>
             </div>
           </div>
         </div>

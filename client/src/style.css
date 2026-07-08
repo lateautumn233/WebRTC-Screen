@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 }
@@ -10,9 +10,86 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: #0a0e1a;
 }
 
 #app {
   width: 100%;
   min-height: 100vh;
+}
+
+/* ── A2 设计令牌 ─────────────────────────────── */
+
+/* 极光背景：低亮度渐变，只保留氛围感 */
+.aurora {
+  background:
+    radial-gradient(55% 55% at 12% 8%, rgba(56, 189, 248, .10), transparent 60%),
+    radial-gradient(45% 45% at 88% 12%, rgba(129, 140, 248, .10), transparent 60%),
+    #0a0e1a;
+}
+
+/* 卡片：纯色深表面 + 细边框，不使用 backdrop-filter，避免 GPU 合成开销 */
+.surface {
+  background: #10162a;
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+
+/* 毛玻璃仅用于顶栏（不与视频区域重叠） */
+.header-glass {
+  background: rgba(10, 14, 26, .78);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+}
+
+/* 发光只用于当前屏幕唯一主操作按钮 */
+.glow-primary {
+  box-shadow: 0 8px 32px -8px rgba(99, 102, 241, .55);
+}
+
+.glow-violet {
+  box-shadow: 0 8px 32px -8px rgba(139, 92, 246, .55);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, .12);
+  border-radius: 99px;
+}
+
+/* 码率滑杆 */
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 99px;
+  background: #1e2742;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #818cf8;
+  border: 3px solid #10162a;
+  cursor: pointer;
+}
+
+input[type=range]:disabled::-webkit-slider-thumb {
+  background: #475569;
+  cursor: not-allowed;
+}
+
+input[type=range]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #818cf8;
+  border: 3px solid #10162a;
+  cursor: pointer;
 }

@@ -1,12 +1,12 @@
 <template>
   <div
     ref="containerRef"
-    class="relative bg-black rounded-xl overflow-hidden shadow-lg"
+    class="relative surface rounded-2xl overflow-hidden"
     :class="{ 'fixed inset-0 z-50 rounded-none': isFullscreen || isPageFullscreen }"
   >
     <!-- 视频/Canvas 容器 -->
     <div
-      class="bg-gray-900 flex items-center justify-center"
+      class="bg-black flex items-center justify-center"
       :class="(isFullscreen || isPageFullscreen) ? 'w-full h-full' : 'aspect-video'"
     >
       <!-- 本地预览 (video 元素) -->
@@ -27,8 +27,8 @@
       ></canvas>
 
       <!-- 占位符 -->
-      <div v-else class="text-gray-500 flex flex-col items-center gap-2">
-        <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div v-else class="text-slate-500 flex flex-col items-center gap-2">
+        <svg class="w-14 h-14 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
         </svg>
         <span class="text-sm">{{ placeholder }}</span>
@@ -39,7 +39,7 @@
     <div v-if="showStatus" class="absolute top-3 left-3 flex items-center gap-2">
       <div
         :class="[
-          'px-2 py-1 rounded text-xs font-medium flex items-center gap-1',
+          'px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5',
           statusClass
         ]"
       >
@@ -50,10 +50,22 @@
 
     <!-- 全屏按钮组 -->
     <div v-if="mode === 'playback'" class="absolute top-3 right-3 flex gap-2">
+      <!-- 统计信息切换按钮 -->
+      <button
+        v-if="showStats"
+        @click="statsVisible = !statsVisible"
+        class="p-2 bg-black/55 hover:bg-black/75 rounded-md text-slate-200 transition-colors"
+        :title="statsVisible ? '隐藏统计信息' : '显示统计信息'"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" :class="{ 'opacity-40': !statsVisible }">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </button>
+
       <!-- 网页全屏按钮 -->
       <button
         @click="togglePageFullscreen"
-        class="p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+        class="p-2 bg-black/55 hover:bg-black/75 rounded-md text-slate-200 transition-colors"
         :title="isPageFullscreen ? '退出网页全屏' : '网页全屏'"
       >
         <svg v-if="!isPageFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -67,7 +79,7 @@
       <!-- 浏览器全屏按钮 -->
       <button
         @click="toggleFullscreen"
-        class="p-2 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors"
+        class="p-2 bg-black/55 hover:bg-black/75 rounded-md text-slate-200 transition-colors"
         :title="isFullscreen ? '退出全屏' : '全屏播放'"
       >
         <svg v-if="!isFullscreen" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,18 +91,18 @@
       </button>
     </div>
 
-    <!-- 统计信息面板 -->
-    <div v-if="showStats && stats && !isFullscreen && !isPageFullscreen" class="absolute bottom-3 left-3 right-3">
-      <div class="bg-black/70 backdrop-blur rounded-lg px-4 py-3 space-y-2">
+    <!-- 统计信息面板：半透明纯色，无 backdrop-filter，避免视频区 GPU 合成开销 -->
+    <div v-if="showStats && statsVisible && stats && !isFullscreen && !isPageFullscreen" class="absolute bottom-3 left-3 right-3">
+      <div class="bg-black/55 rounded-xl px-4 py-3 space-y-2">
         <!-- 第一行：媒体信息 -->
         <div class="flex items-center gap-4 text-xs">
           <div class="flex items-center gap-1.5">
-            <span class="text-gray-500">分辨率</span>
-            <span class="text-white font-medium">{{ stats.resolution }}</span>
+            <span class="text-slate-500">分辨率</span>
+            <span class="text-slate-200 font-medium">{{ stats.resolution }}</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="text-gray-500">编解码器</span>
-            <span class="text-purple-400 font-medium">{{ stats.codec }}</span>
+            <span class="text-slate-500">编解码器</span>
+            <span class="text-violet-300 font-medium">{{ stats.codec }}</span>
           </div>
         </div>
         <!-- 分隔线 -->
@@ -98,24 +110,24 @@
         <!-- 第二行：性能指标 -->
         <div class="grid grid-cols-3 md:grid-cols-5 gap-2 text-xs">
           <div class="flex flex-col">
-            <span class="text-gray-500">帧率</span>
-            <span class="text-green-400 font-medium">{{ stats.fps }} fps</span>
+            <span class="text-slate-500">帧率</span>
+            <span class="text-emerald-300 font-medium">{{ stats.fps }} fps</span>
           </div>
           <div class="flex flex-col">
-            <span class="text-gray-500">码率</span>
-            <span class="text-blue-400 font-medium">{{ stats.bitrate }}</span>
+            <span class="text-slate-500">码率</span>
+            <span class="text-sky-300 font-medium">{{ stats.bitrate }}</span>
           </div>
           <div class="flex flex-col">
-            <span class="text-gray-500">编码</span>
-            <span class="text-yellow-400 font-medium">{{ stats.encodeLatency }}</span>
+            <span class="text-slate-500">编码</span>
+            <span class="text-amber-300 font-medium">{{ stats.encodeLatency }}</span>
           </div>
           <div class="flex flex-col">
-            <span class="text-gray-500">解码</span>
-            <span class="text-orange-400 font-medium">{{ stats.decodeLatency }}</span>
+            <span class="text-slate-500">解码</span>
+            <span class="text-orange-300 font-medium">{{ stats.decodeLatency }}</span>
           </div>
           <div class="flex flex-col">
-            <span class="text-gray-500">网络</span>
-            <span class="text-rose-400 font-medium">{{ stats.networkLatency }}</span>
+            <span class="text-slate-500">网络</span>
+            <span class="text-rose-300 font-medium">{{ stats.networkLatency }}</span>
           </div>
         </div>
       </div>
@@ -124,7 +136,7 @@
     <!-- 全屏模式下的退出提示 -->
     <div
       v-if="isFullscreen || isPageFullscreen"
-      class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded text-white text-xs opacity-0 hover:opacity-100 transition-opacity"
+      class="absolute top-3 left-1/2 -translate-x-1/2 bg-black/55 px-3 py-1 rounded-md text-slate-200 text-xs opacity-0 hover:opacity-100 transition-opacity"
     >
       {{ isFullscreen ? '按 ESC 退出全屏' : '点击按钮退出网页全屏' }}
     </div>
@@ -170,6 +182,7 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const audioRef = ref<HTMLAudioElement | null>(null)
 const stats = ref<Stats | null>(null)
+const statsVisible = ref(true)
 const isFullscreen = ref(false)
 const isPageFullscreen = ref(false)
 
@@ -198,13 +211,13 @@ function emaSmooth(current: number, newValue: number): number {
 const statusClass = computed(() => {
   switch (props.status) {
     case 'streaming':
-      return 'bg-red-600 text-white'
+      return 'bg-rose-500/90 text-white'
     case 'connecting':
-      return 'bg-yellow-600 text-white'
+      return 'bg-amber-500/90 text-white'
     case 'error':
-      return 'bg-red-800 text-white'
+      return 'bg-rose-700/90 text-white'
     default:
-      return 'bg-gray-600 text-white'
+      return 'bg-slate-700/80 text-slate-300'
   }
 })
 
