@@ -1,22 +1,33 @@
 import { ref } from 'vue'
 import { logger } from '../utils/logger'
+import { RESOLUTION_MAP, type ResolutionPreset } from '../types'
 
 export function useScreenCapture() {
   const stream = ref<MediaStream | null>(null)
   const isCapturing = ref(false)
   const error = ref<string | null>(null)
 
-  async function startCapture(options?: { audio?: boolean; framerate?: number }) {
+  async function startCapture(options?: { audio?: boolean; framerate?: number; resolution?: ResolutionPreset }) {
     try {
       error.value = null
 
       const fps = options?.framerate ?? 60
+      const resolution = options?.resolution ? RESOLUTION_MAP[options.resolution] : null
+
+      const videoConstraints: MediaTrackConstraints = {
+        displaySurface: 'monitor',
+        frameRate: { ideal: fps, max: fps }
+      }
+
+      // 约束捕获分辨率：让浏览器在原生捕获/GPU 回读阶段就降采样，
+      // 避免高分屏在原始分辨率下回读带宽不足导致实际交付帧率跟不上协商的高帧率
+      if (resolution) {
+        videoConstraints.width = { ideal: resolution.width }
+        videoConstraints.height = { ideal: resolution.height }
+      }
 
       const displayMediaOptions: DisplayMediaStreamOptions = {
-        video: {
-          displaySurface: 'monitor',
-          frameRate: { ideal: fps, max: fps }
-        },
+        video: videoConstraints,
         audio: options?.audio ?? true
       }
 

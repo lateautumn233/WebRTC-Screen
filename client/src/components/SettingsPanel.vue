@@ -58,7 +58,7 @@
       <!-- 帧率选择 -->
       <div class="mb-4">
         <label class="block text-xs text-slate-500 mb-2">帧率</label>
-        <div class="grid grid-cols-3 gap-1.5">
+        <div class="grid grid-cols-4 gap-1.5">
           <button
             v-for="fps in framerates"
             :key="fps"
@@ -74,6 +74,9 @@
             {{ fps }} fps
           </button>
         </div>
+        <p v-if="modelValue.framerate === 120" class="text-[10px] text-slate-600 mt-1.5">
+          120 fps 仅共享浏览器标签页时可达到；共享整个屏幕或窗口会被 Chrome 引擎限制在约 50-60 fps（与分辨率、显示器刷新率无关）
+        </p>
       </div>
 
       <!-- 码率滑块 -->
@@ -158,7 +161,7 @@ const resolutions: { value: ResolutionPreset; label: string }[] = [
   { value: 'original', label: '原始' }
 ]
 
-const framerates: FrameratePreset[] = [15, 30, 60]
+const framerates: FrameratePreset[] = [15, 30, 60, 120]
 
 const bitrateModes: { value: BitrateMode; label: string }[] = [
   { value: 'cbr', label: 'CBR' },

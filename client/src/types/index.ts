@@ -4,8 +4,8 @@ export type CodecType = 'h264' | 'hevc' | 'vp8' | 'vp9' | 'av1'
 // 分辨率预设
 export type ResolutionPreset = '720p' | '1080p' | '1440p' | 'original'
 
-// 帧率预设
-export type FrameratePreset = 15 | 30 | 60
+// 帧率预设（120 为 Chromium 屏幕捕获上限，需高刷新率显示器才能实际达到）
+export type FrameratePreset = 15 | 30 | 60 | 120
 
 // 码率模式
 export type BitrateMode = 'cbr' | 'vbr'
