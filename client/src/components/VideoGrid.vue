@@ -207,17 +207,23 @@ const audioRefs = new Map<string, HTMLAudioElement>()
 // 统计信息
 const sharerStats = reactive(new Map<string, SharerStats>())
 const sharerFrameCounts = new Map<string, number>()
-const sharerLastFpsUpdate = new Map<string, number>()
 const sharerCurrentFps = new Map<string, number>()
 const sharerTotalBytes = new Map<string, number>()
-const sharerLastBitrateUpdate = new Map<string, number>()
 const sharerCurrentBitrate = new Map<string, number>()
+const sharerResolutions = new Map<string, string>()
 const sharerCodecs = new Map<string, string>()
 
-// 延迟追踪 (EMA 平滑)
+// 延迟追踪：回调只累加原始采样，EMA 平滑统一在 250ms 定时器里对窗口均值做一次，
+// 避免高帧率下每帧都做一次 EMA 导致平滑时间常数被帧率稀释、观感仍然跳动
 const sharerEncodeLatency = new Map<string, number>()
 const sharerDecodeLatency = new Map<string, number>()
 const sharerNetworkLatency = new Map<string, number>()
+const sharerEncodeLatencySum = new Map<string, number>()
+const sharerEncodeLatencyCount = new Map<string, number>()
+const sharerDecodeLatencySum = new Map<string, number>()
+const sharerDecodeLatencyCount = new Map<string, number>()
+const sharerNetworkLatencySum = new Map<string, number>()
+const sharerNetworkLatencyCount = new Map<string, number>()
 const EMA_ALPHA = 0.3
 
 function emaSmooth(current: number, newValue: number): number {
@@ -333,70 +339,87 @@ function drawFrame(sharerId: string, frame: VideoFrame, decodeLatencyMs?: number
   ctx.drawImage(frame, 0, 0)
   frame.close()
 
-  // 更新解码延迟
+  // 解码延迟：仅累加采样，平滑在定时器里做
   if (decodeLatencyMs !== undefined && decodeLatencyMs > 0) {
-    const current = sharerDecodeLatency.get(sharerId) ?? 0
-    sharerDecodeLatency.set(sharerId, emaSmooth(current, decodeLatencyMs))
+    sharerDecodeLatencySum.set(sharerId, (sharerDecodeLatencySum.get(sharerId) ?? 0) + decodeLatencyMs)
+    sharerDecodeLatencyCount.set(sharerId, (sharerDecodeLatencyCount.get(sharerId) ?? 0) + 1)
   }
 
-  // 更新统计
-  updateStats(sharerId, width, height)
+  // 帧回调只累加原始数据，统计面板由定时器按固定节奏刷新
+  sharerFrameCounts.set(sharerId, (sharerFrameCounts.get(sharerId) ?? 0) + 1)
+  sharerResolutions.set(sharerId, `${width}x${height}`)
 }
 
-function updateStats(sharerId: string, width: number, height: number) {
+// 统计面板固定 250ms 刷新，与帧渲染解耦：帧率/码率按短窗口采样后 EMA 平滑，数值平缓过渡
+const STATS_REFRESH_MS = 250
+let statsTimer: ReturnType<typeof setInterval> | null = null
+let lastStatsRefresh = 0
+
+function refreshStats() {
   const now = performance.now()
+  const elapsed = now - lastStatsRefresh
+  lastStatsRefresh = now
+  if (elapsed <= 0) return
 
-  // FPS
-  const frameCount = (sharerFrameCounts.get(sharerId) ?? 0) + 1
-  sharerFrameCounts.set(sharerId, frameCount)
+  for (const [sharerId, resolution] of sharerResolutions) {
+    const fps = emaSmooth(
+      sharerCurrentFps.get(sharerId) ?? 0,
+      (sharerFrameCounts.get(sharerId) ?? 0) * 1000 / elapsed
+    )
+    sharerCurrentFps.set(sharerId, fps)
+    sharerFrameCounts.set(sharerId, 0)
 
-  if (!sharerLastFpsUpdate.has(sharerId)) {
-    sharerLastFpsUpdate.set(sharerId, now)
-  } else {
-    const lastFps = sharerLastFpsUpdate.get(sharerId)!
-    const elapsed = now - lastFps
-    if (elapsed >= 1000) {
-      sharerCurrentFps.set(sharerId, Math.round(frameCount * 1000 / elapsed))
-      sharerFrameCounts.set(sharerId, 0)
-      sharerLastFpsUpdate.set(sharerId, now)
+    const bitrate = emaSmooth(
+      sharerCurrentBitrate.get(sharerId) ?? 0,
+      (sharerTotalBytes.get(sharerId) ?? 0) * 8 / elapsed // kbps
+    )
+    sharerCurrentBitrate.set(sharerId, bitrate)
+    sharerTotalBytes.set(sharerId, 0)
+
+    let bitrateStr = '-'
+    if (bitrate >= 1) {
+      bitrateStr = bitrate > 1000
+        ? `${(bitrate / 1000).toFixed(1)} Mbps`
+        : `${Math.round(bitrate)} kbps`
     }
-  }
 
-  // Bitrate
-  if (!sharerLastBitrateUpdate.has(sharerId)) {
-    sharerLastBitrateUpdate.set(sharerId, now)
-  } else {
-    const lastBitrate = sharerLastBitrateUpdate.get(sharerId)!
-    const elapsed = now - lastBitrate
-    const totalBytes = sharerTotalBytes.get(sharerId) ?? 0
-    if (elapsed >= 1000) {
-      sharerCurrentBitrate.set(sharerId, Math.round(totalBytes * 8 / 1000 / (elapsed / 1000)))
-      sharerTotalBytes.set(sharerId, 0)
-      sharerLastBitrateUpdate.set(sharerId, now)
+    // 延迟：窗口内有采样才更新，无采样时保留上次的值（不像 fps/码率那样衰减到 0）
+    const encCount = sharerEncodeLatencyCount.get(sharerId) ?? 0
+    if (encCount > 0) {
+      const avg = (sharerEncodeLatencySum.get(sharerId) ?? 0) / encCount
+      sharerEncodeLatency.set(sharerId, emaSmooth(sharerEncodeLatency.get(sharerId) ?? 0, avg))
+      sharerEncodeLatencySum.set(sharerId, 0)
+      sharerEncodeLatencyCount.set(sharerId, 0)
     }
+    const decCount = sharerDecodeLatencyCount.get(sharerId) ?? 0
+    if (decCount > 0) {
+      const avg = (sharerDecodeLatencySum.get(sharerId) ?? 0) / decCount
+      sharerDecodeLatency.set(sharerId, emaSmooth(sharerDecodeLatency.get(sharerId) ?? 0, avg))
+      sharerDecodeLatencySum.set(sharerId, 0)
+      sharerDecodeLatencyCount.set(sharerId, 0)
+    }
+    const netCount = sharerNetworkLatencyCount.get(sharerId) ?? 0
+    if (netCount > 0) {
+      const avg = (sharerNetworkLatencySum.get(sharerId) ?? 0) / netCount
+      sharerNetworkLatency.set(sharerId, emaSmooth(sharerNetworkLatency.get(sharerId) ?? 0, avg))
+      sharerNetworkLatencySum.set(sharerId, 0)
+      sharerNetworkLatencyCount.set(sharerId, 0)
+    }
+
+    const encLat = sharerEncodeLatency.get(sharerId) ?? 0
+    const decLat = sharerDecodeLatency.get(sharerId) ?? 0
+    const netLat = sharerNetworkLatency.get(sharerId) ?? 0
+
+    sharerStats.set(sharerId, {
+      resolution,
+      fps: `${Math.round(fps)}`,
+      bitrate: bitrateStr,
+      codec: sharerCodecs.get(sharerId) ?? '-',
+      encodeLatency: encLat > 0 ? `${encLat.toFixed(1)} ms` : '-',
+      decodeLatency: decLat > 0 ? `${decLat.toFixed(1)} ms` : '-',
+      networkLatency: netLat > 0 ? `${netLat.toFixed(1)} ms` : '-'
+    })
   }
-
-  const currentBitrate = sharerCurrentBitrate.get(sharerId) ?? 0
-  let bitrateStr = '-'
-  if (currentBitrate > 0) {
-    bitrateStr = currentBitrate > 1000
-      ? `${(currentBitrate / 1000).toFixed(1)} Mbps`
-      : `${currentBitrate} kbps`
-  }
-
-  const encLat = sharerEncodeLatency.get(sharerId) ?? 0
-  const decLat = sharerDecodeLatency.get(sharerId) ?? 0
-  const netLat = sharerNetworkLatency.get(sharerId) ?? 0
-
-  sharerStats.set(sharerId, {
-    resolution: `${width}x${height}`,
-    fps: `${sharerCurrentFps.get(sharerId) ?? 0}`,
-    bitrate: bitrateStr,
-    codec: sharerCodecs.get(sharerId) ?? '-',
-    encodeLatency: encLat > 0 ? `${encLat.toFixed(1)} ms` : '-',
-    decodeLatency: decLat > 0 ? `${decLat.toFixed(1)} ms` : '-',
-    networkLatency: netLat > 0 ? `${netLat.toFixed(1)} ms` : '-'
-  })
 }
 
 // 设置编码器信息
@@ -416,16 +439,16 @@ function setCodec(sharerId: string, codec: string) {
   }
 }
 
-// 设置编码延迟（从发送端传来）
+// 设置编码延迟（从发送端传来，仅累加采样，平滑在定时器里做）
 function setEncodeLatency(sharerId: string, latencyMs: number) {
-  const current = sharerEncodeLatency.get(sharerId) ?? 0
-  sharerEncodeLatency.set(sharerId, emaSmooth(current, latencyMs))
+  sharerEncodeLatencySum.set(sharerId, (sharerEncodeLatencySum.get(sharerId) ?? 0) + latencyMs)
+  sharerEncodeLatencyCount.set(sharerId, (sharerEncodeLatencyCount.get(sharerId) ?? 0) + 1)
 }
 
-// 设置网络延迟（RTT / 2）
+// 设置网络延迟（RTT / 2，仅累加采样，平滑在定时器里做）
 function setNetworkLatency(sharerId: string, latencyMs: number) {
-  const current = sharerNetworkLatency.get(sharerId) ?? 0
-  sharerNetworkLatency.set(sharerId, emaSmooth(current, latencyMs))
+  sharerNetworkLatencySum.set(sharerId, (sharerNetworkLatencySum.get(sharerId) ?? 0) + latencyMs)
+  sharerNetworkLatencyCount.set(sharerId, (sharerNetworkLatencyCount.get(sharerId) ?? 0) + 1)
 }
 
 // 添加接收字节数（用于码率统计）
@@ -457,23 +480,34 @@ function clearSharer(sharerId: string) {
   audioRefs.delete(sharerId)
   sharerStats.delete(sharerId)
   sharerFrameCounts.delete(sharerId)
-  sharerLastFpsUpdate.delete(sharerId)
   sharerCurrentFps.delete(sharerId)
   sharerTotalBytes.delete(sharerId)
-  sharerLastBitrateUpdate.delete(sharerId)
   sharerCurrentBitrate.delete(sharerId)
+  sharerResolutions.delete(sharerId)
   sharerCodecs.delete(sharerId)
   sharerEncodeLatency.delete(sharerId)
   sharerDecodeLatency.delete(sharerId)
   sharerNetworkLatency.delete(sharerId)
+  sharerEncodeLatencySum.delete(sharerId)
+  sharerEncodeLatencyCount.delete(sharerId)
+  sharerDecodeLatencySum.delete(sharerId)
+  sharerDecodeLatencyCount.delete(sharerId)
+  sharerNetworkLatencySum.delete(sharerId)
+  sharerNetworkLatencyCount.delete(sharerId)
 }
 
 onMounted(() => {
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+  lastStatsRefresh = performance.now()
+  statsTimer = setInterval(refreshStats, STATS_REFRESH_MS)
 })
 
 onUnmounted(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  if (statsTimer) {
+    clearInterval(statsTimer)
+    statsTimer = null
+  }
   canvasRefs.clear()
   canvasCtxs.clear()
   audioRefs.clear()

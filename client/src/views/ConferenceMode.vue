@@ -342,7 +342,7 @@ function setupWebRTCCallbacks() {
             webrtc.sendPing(key)
           }
         })
-      }, 2000)
+      }, 1000)
     }
   })
 

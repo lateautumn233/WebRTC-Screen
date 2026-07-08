@@ -311,7 +311,7 @@ function setupWebRTCCallbacks() {
     if (isViewer.value && !pingInterval) {
       pingInterval = setInterval(() => {
         webrtc.sendPingToAll()
-      }, 2000)
+      }, 1000)
     }
   })
 

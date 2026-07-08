@@ -192,14 +192,20 @@ let animationId: number | null = null
 
 // 码率统计
 let totalBytes = 0
-let lastBitrateUpdate = 0
 let currentBitrate = 0
 let currentCodec = '-'
 
-// 延迟追踪 (EMA 平滑)
+// 延迟追踪：回调只累加原始采样，EMA 平滑统一在 250ms 定时器里对窗口均值做一次，
+// 避免高帧率下每帧都做一次 EMA 导致平滑时间常数被帧率稀释、观感仍然跳动
 let currentEncodeLatency = 0
 let currentDecodeLatency = 0
 let currentNetworkLatency = 0
+let encodeLatencySum = 0
+let encodeLatencyCount = 0
+let decodeLatencySum = 0
+let decodeLatencyCount = 0
+let networkLatencySum = 0
+let networkLatencyCount = 0
 const EMA_ALPHA = 0.3
 
 function emaSmooth(current: number, newValue: number): number {
@@ -311,13 +317,16 @@ function drawFrame(frame: VideoFrame, decodeLatencyMs?: number) {
   ctx.drawImage(frame, 0, 0)
   frame.close()
 
-  // 更新解码延迟
+  // 解码延迟：仅累加采样，平滑在定时器里做
   if (decodeLatencyMs !== undefined && decodeLatencyMs > 0) {
-    currentDecodeLatency = emaSmooth(currentDecodeLatency, decodeLatencyMs)
+    decodeLatencySum += decodeLatencyMs
+    decodeLatencyCount++
   }
 
-  // 更新统计
-  updateStats(width, height)
+  // 帧回调只累加原始数据，统计面板由定时器按固定节奏刷新
+  frameCount++
+  lastFrameWidth = width
+  lastFrameHeight = height
 }
 
 // 更新接收数据量（用于计算码率）
@@ -343,50 +352,70 @@ function setCodec(codec: string) {
   }
 }
 
-// 设置编码延迟（从发送端传来）
+// 设置编码延迟（从发送端传来，仅累加采样，平滑在定时器里做）
 function setEncodeLatency(latencyMs: number) {
-  currentEncodeLatency = emaSmooth(currentEncodeLatency, latencyMs)
+  encodeLatencySum += latencyMs
+  encodeLatencyCount++
 }
 
-// 设置网络延迟（RTT / 2）
+// 设置网络延迟（RTT / 2，仅累加采样，平滑在定时器里做）
 function setNetworkLatency(latencyMs: number) {
-  currentNetworkLatency = emaSmooth(currentNetworkLatency, latencyMs)
+  networkLatencySum += latencyMs
+  networkLatencyCount++
 }
 
 let frameCount = 0
-let lastFpsUpdate = 0
 let currentFps = 0
+let lastFrameWidth = 0
+let lastFrameHeight = 0
 
-function updateStats(width: number, height: number) {
-  frameCount++
+// 统计面板固定 250ms 刷新，与帧渲染解耦：帧率/码率按短窗口采样后 EMA 平滑，数值平缓过渡
+const STATS_REFRESH_MS = 250
+let statsTimer: ReturnType<typeof setInterval> | null = null
+let lastStatsRefresh = 0
+
+function refreshStats() {
   const now = performance.now()
+  const elapsed = now - lastStatsRefresh
+  lastStatsRefresh = now
+  if (lastFrameWidth === 0 || elapsed <= 0) return
 
-  if (now - lastFpsUpdate >= 1000) {
-    currentFps = Math.round(frameCount * 1000 / (now - lastFpsUpdate))
-    frameCount = 0
-    lastFpsUpdate = now
-  }
+  currentFps = emaSmooth(currentFps, frameCount * 1000 / elapsed)
+  frameCount = 0
 
-  // 计算码率
-  if (now - lastBitrateUpdate >= 1000) {
-    currentBitrate = Math.round(totalBytes * 8 / 1000 / ((now - lastBitrateUpdate) / 1000)) // kbps
-    totalBytes = 0
-    lastBitrateUpdate = now
-  }
+  currentBitrate = emaSmooth(currentBitrate, totalBytes * 8 / elapsed) // kbps
+  totalBytes = 0
 
   // 格式化码率显示
   let bitrateStr = '-'
-  if (currentBitrate > 0) {
+  if (currentBitrate >= 1) {
     if (currentBitrate > 1000) {
       bitrateStr = `${(currentBitrate / 1000).toFixed(1)} Mbps`
     } else {
-      bitrateStr = `${currentBitrate} kbps`
+      bitrateStr = `${Math.round(currentBitrate)} kbps`
     }
   }
 
+  // 延迟：窗口内有采样才更新，无采样时保留上次的值（不像 fps/码率那样衰减到 0）
+  if (encodeLatencyCount > 0) {
+    currentEncodeLatency = emaSmooth(currentEncodeLatency, encodeLatencySum / encodeLatencyCount)
+    encodeLatencySum = 0
+    encodeLatencyCount = 0
+  }
+  if (decodeLatencyCount > 0) {
+    currentDecodeLatency = emaSmooth(currentDecodeLatency, decodeLatencySum / decodeLatencyCount)
+    decodeLatencySum = 0
+    decodeLatencyCount = 0
+  }
+  if (networkLatencyCount > 0) {
+    currentNetworkLatency = emaSmooth(currentNetworkLatency, networkLatencySum / networkLatencyCount)
+    networkLatencySum = 0
+    networkLatencyCount = 0
+  }
+
   stats.value = {
-    resolution: `${width}x${height}`,
-    fps: `${currentFps}`,
+    resolution: `${lastFrameWidth}x${lastFrameHeight}`,
+    fps: `${Math.round(currentFps)}`,
     bitrate: bitrateStr,
     codec: currentCodec,
     encodeLatency: currentEncodeLatency > 0 ? `${currentEncodeLatency.toFixed(1)} ms` : '-',
@@ -406,9 +435,17 @@ function clearCanvas() {
   currentBitrate = 0
   currentFps = 0
   frameCount = 0
+  lastFrameWidth = 0
+  lastFrameHeight = 0
   currentEncodeLatency = 0
   currentDecodeLatency = 0
   currentNetworkLatency = 0
+  encodeLatencySum = 0
+  encodeLatencyCount = 0
+  decodeLatencySum = 0
+  decodeLatencyCount = 0
+  networkLatencySum = 0
+  networkLatencyCount = 0
 }
 
 // 设置远程音频流
@@ -427,11 +464,18 @@ onMounted(() => {
     ctx = canvasRef.value.getContext('2d')
   }
   document.addEventListener('fullscreenchange', handleFullscreenChange)
+  // mode 可能在挂载后才切到 playback，定时器常开，无帧时 refreshStats 直接返回
+  lastStatsRefresh = performance.now()
+  statsTimer = setInterval(refreshStats, STATS_REFRESH_MS)
 })
 
 onUnmounted(() => {
   if (animationId) {
     cancelAnimationFrame(animationId)
+  }
+  if (statsTimer) {
+    clearInterval(statsTimer)
+    statsTimer = null
   }
   document.removeEventListener('fullscreenchange', handleFullscreenChange)
 })
