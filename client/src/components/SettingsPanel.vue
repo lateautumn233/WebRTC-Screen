@@ -126,7 +126,7 @@
         <input
           type="range"
           min="1"
-          max="20"
+          max="30"
           step="1"
           :value="modelValue.bitrate"
           :disabled="disabled"
@@ -135,7 +135,7 @@
         />
         <div class="flex justify-between text-[10px] text-slate-600 mt-1">
           <span>1 Mbps</span>
-          <span>20 Mbps</span>
+          <span>30 Mbps</span>
         </div>
       </div>
     </div>
