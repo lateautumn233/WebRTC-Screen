@@ -85,7 +85,7 @@ function gatherIceProbe(primaryHost: string, secondaryHost?: string): Promise<Na
       }
       const parts = event.candidate.candidate.split(' ')
       const ip = parts[4]
-      const port = parseInt(parts[5], 10)
+      const port = parseInt(parts[5] ?? '', 10)
       const typ = parts[7]
       if (typ === 'host' && ip && !ip.startsWith('169.254') && ip !== '0.0.0.0' && !ip.includes(':')) {
         hostIPs.add(ip)
@@ -102,8 +102,8 @@ function gatherIceProbe(primaryHost: string, secondaryHost?: string): Promise<Na
         const sdp = offer.sdp || ''
         const uMatch = sdp.match(/a=ice-ufrag:(.+)/)
         const pMatch = sdp.match(/a=ice-pwd:(.+)/)
-        bUfrag = uMatch ? uMatch[1].trim() : ''
-        bPwd = pMatch ? pMatch[1].trim() : ''
+        bUfrag = uMatch?.[1]?.trim() ?? ''
+        bPwd = pMatch?.[1]?.trim() ?? ''
 
         const ansLines: string[] = []
         for (let line of sdp.split('\n')) {
