@@ -105,6 +105,58 @@ export interface SignalingEvents {
   'participant-left': { participantId: string }
 }
 
+// NAT 类型（探测结果由外部 NAT 检测服务给出，本仓库不重新实现探测逻辑）
+// open: 公网直连；nat1-4: 依次对应 Full Cone / Address-Restricted / Port-Restricted / Symmetric
+// cone_unknown: 已知是锥形但子类型未知（检测服务未配置双节点架构）；blocked: UDP 被屏蔽；unknown: 未检测/检测失败
+export type NatType = 'open' | 'nat1' | 'nat2' | 'nat3' | 'nat4' | 'cone_unknown' | 'blocked' | 'unknown'
+
+// NAT 类型显示文案
+export const NAT_TYPE_LABEL_MAP: Record<NatType, string> = {
+  open: '公网直连',
+  nat1: 'NAT1（全锥形）',
+  nat2: 'NAT2（地址限制）',
+  nat3: 'NAT3（端口限制）',
+  nat4: 'NAT4（对称型）',
+  cone_unknown: '锥形（子类型未知）',
+  blocked: 'UDP 受限',
+  unknown: '未检测'
+}
+
+// NAT 类型徽章样式（延续 emerald=最佳/teal-sky=良好/amber=谨慎/rose=较差/indigo=不确定/slate=未知 的配色语义）
+export const NAT_TYPE_BADGE_CLASS_MAP: Record<NatType, string> = {
+  open: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  nat1: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+  nat2: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+  nat3: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  nat4: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  cone_unknown: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+  blocked: 'bg-slate-700/60 text-slate-300 border-slate-600/50',
+  unknown: 'bg-slate-800/60 text-slate-500 border-slate-700/50'
+}
+
+// NAT 类型 <-> 单字节编码（用于 DataChannel 二进制协议传输，见 useWebRTC.ts 的 MSG_TYPE_NAT_INFO）
+export const NAT_TYPE_BYTE_MAP: Record<NatType, number> = {
+  unknown: 0,
+  open: 1,
+  nat1: 2,
+  nat2: 3,
+  nat3: 4,
+  nat4: 5,
+  cone_unknown: 6,
+  blocked: 7
+}
+
+export const NAT_TYPE_BYTE_TO_TYPE: Record<number, NatType> = {
+  0: 'unknown',
+  1: 'open',
+  2: 'nat1',
+  3: 'nat2',
+  4: 'nat3',
+  5: 'nat4',
+  6: 'cone_unknown',
+  7: 'blocked'
+}
+
 // 编码帧数据 (用于 DataChannel 传输)
 export interface EncodedFrameData {
   type: 'video' | 'audio' | 'config'

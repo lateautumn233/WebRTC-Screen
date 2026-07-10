@@ -1,5 +1,6 @@
 import { ref, shallowRef } from 'vue'
-import type { ConnectionState } from '../types'
+import type { ConnectionState, NatType } from '../types'
+import { NAT_TYPE_BYTE_MAP, NAT_TYPE_BYTE_TO_TYPE } from '../types'
 import { logger } from '../utils/logger'
 
 // 从环境变量读取 TURN 配置（Vite: VITE_TURN_URL, VITE_TURN_USER, VITE_TURN_PASS）
@@ -31,6 +32,7 @@ const MSG_TYPE_CHUNK = 0x01
 const MSG_TYPE_COMPLETE = 0x02
 const MSG_TYPE_PING = 0x03
 const MSG_TYPE_PONG = 0x04
+const MSG_TYPE_NAT_INFO = 0x05
 
 export function useWebRTC() {
   const peerConnections = shallowRef<Map<string, RTCPeerConnection>>(new Map())
@@ -49,6 +51,7 @@ export function useWebRTC() {
   let onDataChannelOpen: ((peerId: string) => void) | null = null
   let onRemoteTrack: ((peerId: string, stream: MediaStream) => void) | null = null
   let onPongReceived: ((peerId: string, rtt: number) => void) | null = null
+  let onNatInfoReceived: ((peerId: string, natType: NatType) => void) | null = null
 
   // 存储要添加的音频轨道和流
   let pendingAudioTrack: MediaStreamTrack | null = null
@@ -158,6 +161,13 @@ export function useWebRTC() {
           const sentTime = view.getFloat64(1, true)
           const rtt = performance.now() - sentTime
           onPongReceived?.(peerId, rtt)
+          return
+        }
+
+        if (msgType === MSG_TYPE_NAT_INFO) {
+          // 收到对端的 NAT 类型信息
+          const code = view.getUint8(1)
+          onNatInfoReceived?.(peerId, NAT_TYPE_BYTE_TO_TYPE[code] ?? 'unknown')
           return
         }
 
@@ -419,6 +429,10 @@ export function useWebRTC() {
     onPongReceived = callback
   }
 
+  function setOnNatInfoReceived(callback: (peerId: string, natType: NatType) => void) {
+    onNatInfoReceived = callback
+  }
+
   // 发送 ping 到指定 peer
   function sendPing(peerId: string) {
     const channel = dataChannels.value.get(peerId)
@@ -435,6 +449,25 @@ export function useWebRTC() {
   function sendPingToAll() {
     dataChannels.value.forEach((_channel, peerId) => {
       sendPing(peerId)
+    })
+  }
+
+  // 发送本机 NAT 类型信息到指定 peer
+  function sendNatInfo(peerId: string, natType: NatType) {
+    const channel = dataChannels.value.get(peerId)
+    if (!channel || channel.readyState !== 'open') return
+
+    const msg = new ArrayBuffer(2)
+    const view = new DataView(msg)
+    view.setUint8(0, MSG_TYPE_NAT_INFO)
+    view.setUint8(1, NAT_TYPE_BYTE_MAP[natType] ?? 0)
+    channel.send(msg)
+  }
+
+  // 发送本机 NAT 类型信息到所有 peer
+  function sendNatInfoToAll(natType: NatType) {
+    dataChannels.value.forEach((_channel, peerId) => {
+      sendNatInfo(peerId, natType)
     })
   }
 
@@ -476,8 +509,11 @@ export function useWebRTC() {
     setOnDataChannelOpen,
     setOnRemoteTrack,
     setOnPongReceived,
+    setOnNatInfoReceived,
     sendPing,
     sendPingToAll,
+    sendNatInfo,
+    sendNatInfoToAll,
     getConnectionCount,
     getConnectedPeers
   }

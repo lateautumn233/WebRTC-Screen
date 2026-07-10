@@ -104,6 +104,10 @@
             <span class="text-slate-500">编解码器</span>
             <span class="text-violet-300 font-medium">{{ stats.codec }}</span>
           </div>
+          <div v-if="natType" class="flex items-center gap-1.5">
+            <span class="text-slate-500">对方 NAT</span>
+            <span :class="['px-1.5 py-0.5 rounded font-medium', NAT_TYPE_BADGE_CLASS_MAP[natType]]">{{ NAT_TYPE_LABEL_MAP[natType] }}</span>
+          </div>
         </div>
         <!-- 分隔线 -->
         <div class="border-t border-white/10"></div>
@@ -149,6 +153,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { api as fullscreen } from 'vue-fullscreen'
+import type { NatType } from '../types'
+import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 
 interface Props {
   mode: 'preview' | 'playback' | 'idle'
@@ -182,6 +188,8 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const audioRef = ref<HTMLAudioElement | null>(null)
 const stats = ref<Stats | null>(null)
+// 对端 NAT 类型：离散的瞬时值，不纳入下方 250ms EMA 刷新循环
+const natType = ref<NatType | null>(null)
 const statsVisible = ref(true)
 const isFullscreen = ref(false)
 const isPageFullscreen = ref(false)
@@ -364,6 +372,11 @@ function setNetworkLatency(latencyMs: number) {
   networkLatencyCount++
 }
 
+// 设置对端 NAT 类型
+function setNatType(nat: NatType) {
+  natType.value = nat
+}
+
 let frameCount = 0
 let currentFps = 0
 let lastFrameWidth = 0
@@ -431,6 +444,7 @@ function clearCanvas() {
   }
   // 重置统计
   stats.value = null
+  natType.value = null
   totalBytes = 0
   currentBitrate = 0
   currentFps = 0
@@ -488,6 +502,7 @@ defineExpose({
   setCodec,
   setAudioStream,
   setEncodeLatency,
-  setNetworkLatency
+  setNetworkLatency,
+  setNatType
 })
 </script>

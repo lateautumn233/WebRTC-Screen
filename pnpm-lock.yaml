@@ -56,10 +56,16 @@ importers:
 
   server:
     dependencies:
+      buffer-crc32:
+        specifier: ^1.0.0
+        version: 1.0.0
       socket.io:
         specifier: ^4.7.4
         version: 4.8.3
     devDependencies:
+      '@types/buffer-crc32':
+        specifier: ^0.2.4
+        version: 0.2.4
       '@types/node':
         specifier: ^20.10.0
         version: 20.19.43
@@ -522,6 +528,9 @@ packages:
   '@tailwindcss/postcss@4.3.2':
     resolution: {integrity: sha512-rjVWYCa7Ngbi5AarT6k8TkxUG3Wl1QKzHdIZVsjZSzf36Jmo2IKZt/NHRAwly8oDkbBOH0YTu+CHuf9jPxMc+g==}
 
+  '@types/buffer-crc32@0.2.4':
+    resolution: {integrity: sha512-GSrhSZOK1/wazf2CjDp3CVJQKWzSc5Ugq3NyZ/RQqg1MWtmA9mAT6i6LzGKhzcRxDOl8aLB+AzvObDSlrMpvLw==}
+
   '@types/cors@2.8.19':
     resolution: {integrity: sha512-mFNylyeyqN93lfe/9CSxOGREz8cpzAhH+E93xJ4xWQf62V8sQ/24reV2nyzUWM6H6Xji+GGHpkbLe7pVoUEskg==}
 
@@ -660,6 +669,10 @@ packages:
     resolution: {integrity: sha512-Cu2E6QejHWzuDMTkuwgpABFgDfZrXLQq5V13YOACZx4mFAG4IwGTbTfHPMr4WtxlHoXSM8FIuRwYYCz5XiabaQ==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
+
+  buffer-crc32@1.0.0:
+    resolution: {integrity: sha512-Db1SbgBS/fg/392AblrMJk97KggmvYhr4pB5ZIMTWtaivCPMWLkmb7m21cJvpvgK+J3nsU2CmmixNBZx4vFj/w==}
+    engines: {node: '>=8.0.0'}
 
   caniuse-lite@1.0.30001803:
     resolution: {integrity: sha512-g/uHREV2ZpK9qMalCsWaxmA6ol+DX8GYhuf3T40RKoP+oL7vhRJh8LNt73PCjpnR6l14FzfPrB5Yux4PKm2meg==}
@@ -1423,6 +1436,10 @@ snapshots:
       postcss: 8.5.16
       tailwindcss: 4.3.2
 
+  '@types/buffer-crc32@0.2.4':
+    dependencies:
+      '@types/node': 24.13.2
+
   '@types/cors@2.8.19':
     dependencies:
       '@types/node': 20.19.43
@@ -1595,6 +1612,8 @@ snapshots:
       electron-to-chromium: 1.5.389
       node-releases: 2.0.50
       update-browserslist-db: 1.2.3(browserslist@4.28.5)
+
+  buffer-crc32@1.0.0: {}
 
   caniuse-lite@1.0.30001803: {}
 

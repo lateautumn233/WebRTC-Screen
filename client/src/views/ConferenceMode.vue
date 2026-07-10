@@ -102,6 +102,27 @@
               <span class="text-slate-500">共享者数量</span>
               <span class="text-slate-200">{{ (isSharing ? 1 : 0) + availableSharers.length }}</span>
             </div>
+            <div v-if="natDetection.natCheckConfigured.value" class="flex justify-between items-center">
+              <span class="text-slate-500">本机 NAT 类型</span>
+              <span v-if="natDetection.detecting.value" class="text-slate-500 text-xs">检测中...</span>
+              <span
+                v-else
+                :class="['px-2 py-0.5 rounded-md text-xs font-medium border', NAT_TYPE_BADGE_CLASS_MAP[natDetection.localNatType.value]]"
+              >
+                {{ NAT_TYPE_LABEL_MAP[natDetection.localNatType.value] }}
+              </span>
+            </div>
+          </div>
+
+          <!-- 共享者视角：各观看者的 NAT 类型 -->
+          <div v-if="watcherNatTypes.size > 0" class="pt-2.5 mt-2.5 border-t border-white/10 space-y-1.5">
+            <div class="text-xs text-slate-600">观看者 NAT 类型</div>
+            <div v-for="[peerId, nat] in watcherNatTypes" :key="peerId" class="flex justify-between items-center text-xs">
+              <span class="text-slate-400 font-mono truncate">{{ peerId.substring(0, 8) }}</span>
+              <span :class="['px-2 py-0.5 rounded-md font-medium border', NAT_TYPE_BADGE_CLASS_MAP[nat]]">
+                {{ NAT_TYPE_LABEL_MAP[nat] }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -110,7 +131,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import VideoGrid from '../components/VideoGrid.vue'
 import SettingsPanel from '../components/SettingsPanel.vue'
 import ConferenceRoomPanel from '../components/ConferenceRoomPanel.vue'
@@ -118,7 +139,9 @@ import { useConferenceSignaling } from '../composables/useConferenceSignaling'
 import { useScreenCapture } from '../composables/useScreenCapture'
 import { useConferenceWebCodecs } from '../composables/useConferenceWebCodecs'
 import { useWebRTC } from '../composables/useWebRTC'
-import type { EncoderSettings } from '../types'
+import { useNatDetection } from '../composables/useNatDetection'
+import type { EncoderSettings, NatType } from '../types'
+import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 import { logger } from '../utils/logger'
 import { saveSettings, loadSettings, saveSession, clearSession, loadSession, saveRoomHistory, loadUsername } from '../utils/storage'
 
@@ -127,6 +150,7 @@ const signaling = useConferenceSignaling()
 const screenCapture = useScreenCapture()
 const webcodecs = useConferenceWebCodecs()
 const webrtc = useWebRTC()
+const natDetection = useNatDetection()
 
 // 状态
 const videoGrid = ref<InstanceType<typeof VideoGrid> | null>(null)
@@ -137,6 +161,8 @@ const isSharing = ref(false)
 const encoderSupported = ref(true)
 const remoteSharers = ref<{ id: string; label?: string }[]>([])
 const availableSharers = ref<string[]>([])
+// 共享者视角：各观看者的 NAT 类型
+const watcherNatTypes = reactive(new Map<string, NatType>())
 let pingInterval: ReturnType<typeof setInterval> | null = null
 // 监听设置变化
 watch(encoderSettings, (newSettings) => {
@@ -176,6 +202,7 @@ function handleLeaveRoom() {
   webrtc.closeAll()
   remoteSharers.value = []
   availableSharers.value = []
+  watcherNatTypes.clear()
   signaling.disconnect()
   signaling.connect()
   clearSession()
@@ -233,6 +260,7 @@ async function stopSharing() {
   const viewerPeers = [...webrtc.peerConnections.value.keys()]
     .filter(key => key.startsWith('viewer:'))
   viewerPeers.forEach(key => webrtc.closePeer(key))
+  watcherNatTypes.clear()
 }
 
 // 开始观看某个共享者
@@ -339,6 +367,7 @@ function setupSignalingCallbacks() {
     // 关闭两个方向的连接
     webrtc.closePeer(sharerKey(participantId))
     webrtc.closePeer(viewerKey(participantId))
+    watcherNatTypes.delete(participantId)
     videoGrid.value?.clearSharer(participantId)
   })
 }
@@ -357,6 +386,9 @@ function setupWebRTCCallbacks() {
       webcodecs.requestKeyFrame()
     }
 
+    // 发送本机 NAT 类型给对端（此时可能还未检测完成，稍后由 watch 补发）
+    webrtc.sendNatInfo(peerId, natDetection.localNatType.value)
+
     // 作为观看者：启动 ping 定时器测量网络延迟
     if (peerId.startsWith('sharer:') && !pingInterval) {
       pingInterval = setInterval(() => {
@@ -367,6 +399,16 @@ function setupWebRTCCallbacks() {
           }
         })
       }, 1000)
+    }
+  })
+
+  // 收到对端 NAT 类型信息：sharer: 前缀 = 我在观看对方，viewer: 前缀 = 对方在观看我
+  webrtc.setOnNatInfoReceived((peerId, natType) => {
+    const originalId = stripKey(peerId)
+    if (peerId.startsWith('sharer:')) {
+      videoGrid.value?.setNatType(originalId, natType)
+    } else if (peerId.startsWith('viewer:')) {
+      watcherNatTypes.set(originalId, natType)
     }
   })
 
@@ -405,10 +447,18 @@ function setupWebRTCCallbacks() {
   })
 }
 
+// 本机 NAT 类型探测完成后，补发给所有已连接的对端（可能晚于 DataChannel 打开）
+watch(natDetection.localNatType, (natType) => {
+  if (natType !== 'unknown') {
+    webrtc.sendNatInfoToAll(natType)
+  }
+})
+
 onMounted(() => {
   signaling.connect()
   setupSignalingCallbacks()
   setupWebRTCCallbacks()
+  natDetection.detectLocalNat()
 
   // 会话恢复：检查是否有未清除的会话
   const session = loadSession()

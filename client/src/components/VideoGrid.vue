@@ -106,6 +106,12 @@
               <span class="text-slate-500">编解码器</span>
               <span class="text-violet-300 font-medium">{{ sharerStats.get(sharer.id)?.codec }}</span>
             </div>
+            <div v-if="sharerNatTypes.get(sharer.id)" class="flex items-center gap-1">
+              <span class="text-slate-500">对方 NAT</span>
+              <span :class="['px-1.5 py-0.5 rounded font-medium', NAT_TYPE_BADGE_CLASS_MAP[sharerNatTypes.get(sharer.id)!]]">
+                {{ NAT_TYPE_LABEL_MAP[sharerNatTypes.get(sharer.id)!] }}
+              </span>
+            </div>
           </div>
           <!-- 分隔线 -->
           <div class="border-t border-white/10"></div>
@@ -160,6 +166,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { api as fullscreen } from 'vue-fullscreen'
+import type { NatType } from '../types'
+import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 
 interface SharerInfo {
   id: string
@@ -206,6 +214,8 @@ const audioRefs = new Map<string, HTMLAudioElement>()
 
 // 统计信息
 const sharerStats = reactive(new Map<string, SharerStats>())
+// 对端 NAT 类型：离散的瞬时值，独立于下方的 250ms EMA 刷新循环
+const sharerNatTypes = reactive(new Map<string, NatType>())
 const sharerFrameCounts = new Map<string, number>()
 const sharerCurrentFps = new Map<string, number>()
 const sharerTotalBytes = new Map<string, number>()
@@ -451,6 +461,11 @@ function setNetworkLatency(sharerId: string, latencyMs: number) {
   sharerNetworkLatencyCount.set(sharerId, (sharerNetworkLatencyCount.get(sharerId) ?? 0) + 1)
 }
 
+// 设置对端 NAT 类型
+function setNatType(sharerId: string, nat: NatType) {
+  sharerNatTypes.set(sharerId, nat)
+}
+
 // 添加接收字节数（用于码率统计）
 function addReceivedBytes(sharerId: string, bytes: number) {
   const current = sharerTotalBytes.get(sharerId) ?? 0
@@ -479,6 +494,7 @@ function clearSharer(sharerId: string) {
   canvasCtxs.delete(sharerId)
   audioRefs.delete(sharerId)
   sharerStats.delete(sharerId)
+  sharerNatTypes.delete(sharerId)
   sharerFrameCounts.delete(sharerId)
   sharerCurrentFps.delete(sharerId)
   sharerTotalBytes.delete(sharerId)
@@ -512,6 +528,7 @@ onUnmounted(() => {
   canvasCtxs.clear()
   audioRefs.clear()
   sharerStats.clear()
+  sharerNatTypes.clear()
 })
 
 defineExpose({
@@ -521,6 +538,7 @@ defineExpose({
   setCodec,
   setEncodeLatency,
   setNetworkLatency,
+  setNatType,
   clearSharer
 })
 </script>
