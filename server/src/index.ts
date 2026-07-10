@@ -1,7 +1,8 @@
 import { createServer } from 'http'
 import { Server, Socket } from 'socket.io'
+import { startNatCheckStunListeners, registerNatCheckHttpRoutes } from './natCheck.js'
 
-const PORT = 3000
+const PORT = Number(process.env.PORT) || 3000
 
 interface ParticipantInfo {
   id: string
@@ -275,6 +276,17 @@ io.on('connection', (socket: Socket) => {
     }
   })
 })
+
+// NAT 类型检测服务（可选）：原生实现 https://github.com/lateautumn233/webrtc_check_nat 的探测协议，
+// 复用信令服务器的 HTTP 端口，不单独起进程。默认关闭，不影响现有部署。
+const NAT_CHECK_MODE = (process.env.NAT_CHECK_MODE || 'off') as 'off' | 'primary' | 'secondary'
+const NAT_CHECK_SECONDARY_URL = process.env.NAT_CHECK_SECONDARY_URL
+
+if (NAT_CHECK_MODE !== 'off') {
+  startNatCheckStunListeners(NAT_CHECK_MODE)
+  registerNatCheckHttpRoutes(httpServer, NAT_CHECK_MODE, NAT_CHECK_SECONDARY_URL)
+  console.log(`NAT check service running in ${NAT_CHECK_MODE} mode`)
+}
 
 httpServer.listen(PORT, () => {
   console.log(`Signaling server running on http://localhost:${PORT}`)

@@ -386,8 +386,11 @@ function setupWebRTCCallbacks() {
       webcodecs.requestKeyFrame()
     }
 
-    // 发送本机 NAT 类型给对端（此时可能还未检测完成，稍后由 watch 补发）
-    webrtc.sendNatInfo(peerId, natDetection.localNatType.value)
+    // 发送本机 NAT 类型给对端（此时可能还未检测完成，稍后由 watch 补发）。
+    // 未配置检测服务时不发送，避免对端一直显示无意义的"未检测"占位
+    if (natDetection.natCheckConfigured.value) {
+      webrtc.sendNatInfo(peerId, natDetection.localNatType.value)
+    }
 
     // 作为观看者：启动 ping 定时器测量网络延迟
     if (peerId.startsWith('sharer:') && !pingInterval) {
