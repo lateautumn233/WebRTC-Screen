@@ -60,72 +60,38 @@
         </div>
       </div>
 
-      <!-- 右侧：设置面板 -->
-      <div class="space-y-4">
-        <!-- 房间面板 -->
-        <ConferenceRoomPanel
-          ref="roomPanel"
-          :connected="signaling.connected.value"
-          :room-state="signaling.roomState.value"
-          :error="signaling.error.value"
-          :available-sharers="availableSharers"
-          :watching-sharers="remoteSharers.map(s => s.id)"
-          @join="handleJoinRoom"
-          @leave="handleLeaveRoom"
-          @watch="startWatching"
-          @stop-watch="stopWatching"
-        />
+      <!-- 右侧：Tab 分栏侧边栏 -->
+      <SidebarTabs v-model="activeSidebarTab" :tabs="sidebarTabs" accent="violet">
+        <!-- 房间面板（含连接状态、参与者 NAT 类型） -->
+        <template #room>
+          <ConferenceRoomPanel
+            ref="roomPanel"
+            :connected="signaling.connected.value"
+            :room-state="signaling.roomState.value"
+            :error="signaling.error.value"
+            :available-sharers="availableSharers"
+            :watching-sharers="remoteSharers.map(s => s.id)"
+            :nat-check-configured="natDetection.natCheckConfigured.value"
+            :nat-detecting="natDetection.detecting.value"
+            :local-nat-type="natDetection.localNatType.value"
+            :participant-nat-types="participantNatTypes"
+            @join="handleJoinRoom"
+            @leave="handleLeaveRoom"
+            @watch="startWatching"
+            @stop-watch="stopWatching"
+          />
+        </template>
 
         <!-- 编码设置 -->
-        <SettingsPanel
-          v-model="encoderSettings"
-          :disabled="isSharing"
-          accent="violet"
-          @update:supported="encoderSupported = $event"
-        />
-
-        <!-- 连接信息 -->
-        <div v-if="isInRoom" class="surface rounded-2xl p-5">
-          <h3 class="font-semibold text-slate-100 mb-4">连接状态</h3>
-          <div class="space-y-2.5 text-sm">
-            <div class="flex justify-between">
-              <span class="text-slate-500">WebRTC 连接数</span>
-              <span class="text-slate-200">{{ webrtc.connectionCount.value }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">正在共享</span>
-              <span :class="isSharing ? 'text-emerald-300' : 'text-slate-500'">
-                {{ isSharing ? '是' : '否' }}
-              </span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">共享者数量</span>
-              <span class="text-slate-200">{{ (isSharing ? 1 : 0) + availableSharers.length }}</span>
-            </div>
-            <div v-if="natDetection.natCheckConfigured.value" class="flex justify-between items-center">
-              <span class="text-slate-500">本机 NAT 类型</span>
-              <span v-if="natDetection.detecting.value" class="text-slate-500 text-xs">检测中...</span>
-              <span
-                v-else
-                :class="['px-2 py-0.5 rounded-md text-xs font-medium border', NAT_TYPE_BADGE_CLASS_MAP[natDetection.localNatType.value]]"
-              >
-                {{ NAT_TYPE_LABEL_MAP[natDetection.localNatType.value] }}
-              </span>
-            </div>
-          </div>
-
-          <!-- 共享者视角：各观看者的 NAT 类型 -->
-          <div v-if="watcherNatTypes.size > 0" class="pt-2.5 mt-2.5 border-t border-white/10 space-y-1.5">
-            <div class="text-xs text-slate-600">观看者 NAT 类型</div>
-            <div v-for="[peerId, nat] in watcherNatTypes" :key="peerId" class="flex justify-between items-center text-xs">
-              <span class="text-slate-400 font-mono truncate">{{ peerId.substring(0, 8) }}</span>
-              <span :class="['px-2 py-0.5 rounded-md font-medium border', NAT_TYPE_BADGE_CLASS_MAP[nat]]">
-                {{ NAT_TYPE_LABEL_MAP[nat] }}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        <template #settings>
+          <SettingsPanel
+            v-model="encoderSettings"
+            :disabled="isSharing"
+            accent="violet"
+            @update:supported="encoderSupported = $event"
+          />
+        </template>
+      </SidebarTabs>
     </div>
   </main>
 </template>
@@ -135,13 +101,13 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import VideoGrid from '../components/VideoGrid.vue'
 import SettingsPanel from '../components/SettingsPanel.vue'
 import ConferenceRoomPanel from '../components/ConferenceRoomPanel.vue'
+import SidebarTabs from '../components/SidebarTabs.vue'
 import { useConferenceSignaling } from '../composables/useConferenceSignaling'
 import { useScreenCapture } from '../composables/useScreenCapture'
 import { useConferenceWebCodecs } from '../composables/useConferenceWebCodecs'
 import { useWebRTC } from '../composables/useWebRTC'
 import { useNatDetection } from '../composables/useNatDetection'
 import type { EncoderSettings, NatType } from '../types'
-import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 import { logger } from '../utils/logger'
 import { saveSettings, loadSettings, saveSession, clearSession, loadSession, saveRoomHistory, loadUsername } from '../utils/storage'
 
@@ -163,6 +129,10 @@ const remoteSharers = ref<{ id: string; label?: string }[]>([])
 const availableSharers = ref<string[]>([])
 // 共享者视角：各观看者的 NAT 类型
 const watcherNatTypes = reactive(new Map<string, NatType>())
+// 观看者视角：正在观看的各共享者的 NAT 类型
+const sharerNatTypes = reactive(new Map<string, NatType>())
+// 合并两个方向，供参与者列表按 id 展示对方的 NAT 类型
+const participantNatTypes = computed(() => new Map([...sharerNatTypes, ...watcherNatTypes]))
 let pingInterval: ReturnType<typeof setInterval> | null = null
 // 监听设置变化
 watch(encoderSettings, (newSettings) => {
@@ -171,6 +141,13 @@ watch(encoderSettings, (newSettings) => {
 
 // 计算属性
 const isInRoom = computed(() => signaling.roomState.value.roomId !== null)
+
+// 右侧 Tab 分栏侧边栏：会议 Tab 内含连接状态
+const activeSidebarTab = ref('room')
+const sidebarTabs = [
+  { key: 'room', label: '会议' },
+  { key: 'settings', label: '设置' }
+]
 
 // 连接方向前缀：区分"作为共享者"和"作为观看者"的连接
 function viewerKey(peerId: string) { return `viewer:${peerId}` }
@@ -203,6 +180,7 @@ function handleLeaveRoom() {
   remoteSharers.value = []
   availableSharers.value = []
   watcherNatTypes.clear()
+  sharerNatTypes.clear()
   signaling.disconnect()
   signaling.connect()
   clearSession()
@@ -275,6 +253,7 @@ function stopWatching(sharerId: string) {
   remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
   webcodecs.stopDecoderForSharer(sharerId)
   webrtc.closePeer(sharerKey(sharerId))
+  sharerNatTypes.delete(sharerId)
   videoGrid.value?.clearSharer(sharerId)
 }
 
@@ -314,6 +293,7 @@ function setupSignalingCallbacks() {
     remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
     webcodecs.stopDecoderForSharer(sharerId)
     webrtc.closePeer(sharerKey(sharerId))
+    sharerNatTypes.delete(sharerId)
     videoGrid.value?.clearSharer(sharerId)
   })
 
@@ -368,6 +348,7 @@ function setupSignalingCallbacks() {
     webrtc.closePeer(sharerKey(participantId))
     webrtc.closePeer(viewerKey(participantId))
     watcherNatTypes.delete(participantId)
+    sharerNatTypes.delete(participantId)
     videoGrid.value?.clearSharer(participantId)
   })
 }
@@ -410,6 +391,7 @@ function setupWebRTCCallbacks() {
     const originalId = stripKey(peerId)
     if (peerId.startsWith('sharer:')) {
       videoGrid.value?.setNatType(originalId, natType)
+      sharerNatTypes.set(originalId, natType)
     } else if (peerId.startsWith('viewer:')) {
       watcherNatTypes.set(originalId, natType)
     }

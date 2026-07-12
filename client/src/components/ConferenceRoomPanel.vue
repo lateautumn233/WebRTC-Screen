@@ -79,9 +79,19 @@
           <span class="text-slate-500">房间号</span>
           <span class="text-slate-200 font-mono">{{ roomState.roomId }}</span>
         </div>
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between" :class="{ 'mb-2.5': natCheckConfigured }">
           <span class="text-slate-500">参与者</span>
           <span class="text-slate-200">{{ roomState.participants.length }} 人</span>
+        </div>
+        <div v-if="natCheckConfigured" class="flex items-center justify-between">
+          <span class="text-slate-500">本机 NAT 类型</span>
+          <span v-if="natDetecting" class="text-slate-500 text-xs">检测中...</span>
+          <span
+            v-else
+            :class="['px-2 py-0.5 rounded-md text-xs font-medium border', NAT_TYPE_BADGE_CLASS_MAP[localNatType]]"
+          >
+            {{ NAT_TYPE_LABEL_MAP[localNatType] }}
+          </span>
         </div>
 
         <!-- 参与者列表 -->
@@ -91,9 +101,9 @@
             <div
               v-for="p in roomState.participants"
               :key="p.id"
-              class="flex items-center justify-between text-sm py-1"
+              class="flex items-center justify-between gap-2 text-sm py-1"
             >
-              <span class="text-slate-300 flex items-center gap-2 truncate">
+              <span class="text-slate-300 flex items-center gap-2 truncate min-w-0">
                 <span
                   :class="[
                     'w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0',
@@ -106,28 +116,36 @@
                 </span>
                 <span class="truncate">{{ displayName(p) }}</span>
               </span>
-              <span
-                v-if="p.isSharing && p.id !== roomState.myId && watchingSharers.includes(p.id)"
-                class="px-2.5 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium cursor-pointer transition-colors shrink-0"
-                @click="emit('stopWatch', p.id)"
-                title="点击取消观看"
-              >
-                观看中
+              <span class="flex items-center gap-1.5 shrink-0">
+                <span
+                  v-if="p.id !== roomState.myId && participantNat(p.id)"
+                  :class="['px-1.5 py-0.5 rounded text-[10px] font-medium border', NAT_TYPE_BADGE_CLASS_MAP[participantNat(p.id) ?? 'unknown']]"
+                >
+                  {{ NAT_TYPE_LABEL_MAP[participantNat(p.id) ?? 'unknown'] }}
+                </span>
+                <span
+                  v-if="p.isSharing && p.id !== roomState.myId && watchingSharers.includes(p.id)"
+                  class="px-2.5 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium cursor-pointer transition-colors"
+                  @click="emit('stopWatch', p.id)"
+                  title="点击取消观看"
+                >
+                  观看中
+                </span>
+                <button
+                  v-else-if="p.isSharing && p.id !== roomState.myId && availableSharers.includes(p.id)"
+                  class="px-2.5 py-0.5 rounded-md bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium transition-colors"
+                  @click="emit('watch', p.id)"
+                >
+                  观看
+                </button>
+                <span
+                  v-else-if="p.isSharing"
+                  class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 text-xs"
+                >
+                  共享中
+                </span>
+                <span v-else class="text-xs text-slate-600">未共享</span>
               </span>
-              <button
-                v-else-if="p.isSharing && p.id !== roomState.myId && availableSharers.includes(p.id)"
-                class="px-2.5 py-0.5 rounded-md bg-violet-500 hover:bg-violet-400 text-white text-xs font-medium transition-colors shrink-0"
-                @click="emit('watch', p.id)"
-              >
-                观看
-              </button>
-              <span
-                v-else-if="p.isSharing"
-                class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 border border-rose-500/30 text-xs shrink-0"
-              >
-                共享中
-              </span>
-              <span v-else class="text-xs text-slate-600 shrink-0">未共享</span>
             </div>
           </div>
         </div>
@@ -150,7 +168,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { ConferenceRoomState } from '../types'
+import type { ConferenceRoomState, NatType } from '../types'
+import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 import { loadUsername, saveUsername, loadRoomHistory, removeRoomHistory } from '../utils/storage'
 
 interface Props {
@@ -159,9 +178,22 @@ interface Props {
   error: string | null
   availableSharers: string[]
   watchingSharers: string[]
+  natCheckConfigured?: boolean
+  natDetecting?: boolean
+  localNatType?: NatType
+  participantNatTypes?: Map<string, NatType>
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  natCheckConfigured: false,
+  natDetecting: false,
+  localNatType: 'unknown',
+  participantNatTypes: () => new Map()
+})
+
+function participantNat(id: string): NatType | undefined {
+  return props.participantNatTypes.get(id)
+}
 
 const emit = defineEmits<{
   join: [roomId: string, username: string]

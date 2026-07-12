@@ -84,62 +84,64 @@
         </div>
       </div>
 
-      <!-- 右侧：设置面板 -->
-      <div class="space-y-4">
-        <!-- 房间面板 -->
-        <RoomPanel
-          ref="roomPanel"
-          :connected="signaling.connected.value"
-          :room-state="signaling.roomState.value"
-          :error="signaling.error.value"
-          @join="handleJoinRoom"
-          @leave="handleLeaveRoom"
-        />
+      <!-- 右侧：Tab 分栏侧边栏 -->
+      <SidebarTabs v-model="activeSidebarTab" :tabs="sidebarTabs" accent="indigo">
+        <!-- 房间面板 + 连接状态 -->
+        <template #room>
+          <RoomPanel
+            ref="roomPanel"
+            :connected="signaling.connected.value"
+            :room-state="signaling.roomState.value"
+            :error="signaling.error.value"
+            @join="handleJoinRoom"
+            @leave="handleLeaveRoom"
+          />
+
+          <div v-if="isInRoom" class="surface rounded-2xl p-5 mt-4">
+            <h3 class="font-semibold text-slate-100 mb-4">连接状态</h3>
+            <div class="space-y-2.5 text-sm">
+              <div class="flex justify-between">
+                <span class="text-slate-500">WebRTC 状态</span>
+                <span :class="connectionStateClass">{{ connectionStateText }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500">连接数</span>
+                <span class="text-slate-200">{{ webrtc.getConnectionCount() }}</span>
+              </div>
+              <div v-if="natDetection.natCheckConfigured.value" class="flex justify-between items-center">
+                <span class="text-slate-500">本机 NAT 类型</span>
+                <span v-if="natDetection.detecting.value" class="text-slate-500 text-xs">检测中...</span>
+                <span
+                  v-else
+                  :class="['px-2 py-0.5 rounded-md text-xs font-medium border', NAT_TYPE_BADGE_CLASS_MAP[natDetection.localNatType.value]]"
+                >
+                  {{ NAT_TYPE_LABEL_MAP[natDetection.localNatType.value] }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 主持人视角：各观众的 NAT 类型 -->
+            <div v-if="isHost && viewerNatTypes.size > 0" class="pt-2.5 mt-2.5 border-t border-white/10 space-y-1.5">
+              <div class="text-xs text-slate-600">观众 NAT 类型</div>
+              <div v-for="[peerId, nat] in viewerNatTypes" :key="peerId" class="flex justify-between items-center text-xs">
+                <span class="text-slate-400 font-mono truncate">{{ peerId.substring(0, 8) }}</span>
+                <span :class="['px-2 py-0.5 rounded-md font-medium border', NAT_TYPE_BADGE_CLASS_MAP[nat]]">
+                  {{ NAT_TYPE_LABEL_MAP[nat] }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </template>
 
         <!-- 编码设置（仅主持人显示） -->
-        <SettingsPanel
-          v-if="isHost || !isInRoom"
-          v-model="encoderSettings"
-          :disabled="isStreaming"
-          @update:supported="encoderSupported = $event"
-        />
-
-        <!-- 连接信息 -->
-        <div v-if="isInRoom" class="surface rounded-2xl p-5">
-          <h3 class="font-semibold text-slate-100 mb-4">连接状态</h3>
-          <div class="space-y-2.5 text-sm">
-            <div class="flex justify-between">
-              <span class="text-slate-500">WebRTC 状态</span>
-              <span :class="connectionStateClass">{{ connectionStateText }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-500">连接数</span>
-              <span class="text-slate-200">{{ webrtc.getConnectionCount() }}</span>
-            </div>
-            <div v-if="natDetection.natCheckConfigured.value" class="flex justify-between items-center">
-              <span class="text-slate-500">本机 NAT 类型</span>
-              <span v-if="natDetection.detecting.value" class="text-slate-500 text-xs">检测中...</span>
-              <span
-                v-else
-                :class="['px-2 py-0.5 rounded-md text-xs font-medium border', NAT_TYPE_BADGE_CLASS_MAP[natDetection.localNatType.value]]"
-              >
-                {{ NAT_TYPE_LABEL_MAP[natDetection.localNatType.value] }}
-              </span>
-            </div>
-          </div>
-
-          <!-- 主持人视角：各观众的 NAT 类型 -->
-          <div v-if="isHost && viewerNatTypes.size > 0" class="pt-2.5 mt-2.5 border-t border-white/10 space-y-1.5">
-            <div class="text-xs text-slate-600">观众 NAT 类型</div>
-            <div v-for="[peerId, nat] in viewerNatTypes" :key="peerId" class="flex justify-between items-center text-xs">
-              <span class="text-slate-400 font-mono truncate">{{ peerId.substring(0, 8) }}</span>
-              <span :class="['px-2 py-0.5 rounded-md font-medium border', NAT_TYPE_BADGE_CLASS_MAP[nat]]">
-                {{ NAT_TYPE_LABEL_MAP[nat] }}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+        <template #settings>
+          <SettingsPanel
+            v-model="encoderSettings"
+            :disabled="isStreaming"
+            @update:supported="encoderSupported = $event"
+          />
+        </template>
+      </SidebarTabs>
     </div>
   </main>
 </template>
@@ -149,6 +151,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import VideoPlayer from '../components/VideoPlayer.vue'
 import SettingsPanel from '../components/SettingsPanel.vue'
 import RoomPanel from '../components/RoomPanel.vue'
+import SidebarTabs from '../components/SidebarTabs.vue'
 import { useSignaling } from '../composables/useSignaling'
 import { useScreenCapture } from '../composables/useScreenCapture'
 import { useWebCodecs } from '../composables/useWebCodecs'
@@ -189,6 +192,19 @@ const isInRoom = computed(() => signaling.roomState.value.roomId !== null)
 const isHost = computed(() => signaling.roomState.value.role === 'host')
 const isViewer = computed(() => signaling.roomState.value.role === 'viewer')
 const hasHost = computed(() => signaling.roomState.value.hostId !== null)
+
+// 右侧 Tab 分栏侧边栏：房间 Tab 内含连接状态；设置仅主持人可见
+const activeSidebarTab = ref('room')
+const sidebarTabs = computed(() => {
+  const tabs: { key: string; label: string }[] = [{ key: 'room', label: '房间' }]
+  if (isHost.value || !isInRoom.value) tabs.push({ key: 'settings', label: '设置' })
+  return tabs
+})
+watch(sidebarTabs, (tabs) => {
+  if (!tabs.some((t) => t.key === activeSidebarTab.value)) {
+    activeSidebarTab.value = tabs[0]?.key ?? 'room'
+  }
+})
 
 const videoMode = computed(() => {
   if (isHost.value && screenCapture.isCapturing.value) return 'preview'
