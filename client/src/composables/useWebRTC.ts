@@ -33,6 +33,10 @@ const MSG_TYPE_COMPLETE = 0x02
 const MSG_TYPE_PING = 0x03
 const MSG_TYPE_PONG = 0x04
 const MSG_TYPE_NAT_INFO = 0x05
+const MSG_TYPE_KEYFRAME_REQUEST = 0x06
+
+// 同一个 peer 请求关键帧的最小间隔，避免丢包密集时连续触发请求刷屏
+const KEYFRAME_REQUEST_COOLDOWN_MS = 1500
 
 export function useWebRTC() {
   const peerConnections = shallowRef<Map<string, RTCPeerConnection>>(new Map())
@@ -43,6 +47,10 @@ export function useWebRTC() {
 
   // 接收端：重组分片的缓冲区
   const receiveBuffers = new Map<string, Map<number, Uint8Array[]>>()
+  // 接收端：每个 peer 最后一次成功处理的 COMPLETE 消息序号，用于检测整帧丢失（分片+COMPLETE 都被放弃重传）
+  const lastCompleteSeq = new Map<string, number>()
+  // 每个 peer 最后一次发送关键帧请求的时间，用于节流
+  const lastKeyFrameRequestAt = new Map<string, number>()
 
   // 回调函数
   let onDataReceived: ((peerId: string, data: ArrayBuffer) => void) | null = null
@@ -52,13 +60,18 @@ export function useWebRTC() {
   let onRemoteTrack: ((peerId: string, stream: MediaStream) => void) | null = null
   let onPongReceived: ((peerId: string, rtt: number) => void) | null = null
   let onNatInfoReceived: ((peerId: string, natType: NatType) => void) | null = null
+  // 接收端检测到丢帧时触发（分片重组不完整，或整帧被 SCTP 放弃重传）
+  let onFrameLoss: ((peerId: string) => void) | null = null
+  // 收到对端的关键帧请求时触发（本端为发送视频的一方）
+  let onKeyFrameRequested: ((peerId: string) => void) | null = null
 
   // 存储要添加的音频轨道和流
   let pendingAudioTrack: MediaStreamTrack | null = null
   let pendingAudioStream: MediaStream | null = null
 
-  // 消息序列号
-  let messageSeq = 0
+  // 消息序列号：必须按 peer 独立计数。若用全局计数器，broadcastData 广播给多个 peer 时
+  // 每个 peer 拿到的序号会有跳跃（跳跃量=peer 数），导致接收端丢帧检测出现误判
+  const messageSeqByPeer = new Map<string, number>()
 
   // 清理指定连接（内部使用，不触发额外状态更新）
   function cleanupPeer(peerId: string) {
@@ -75,6 +88,9 @@ export function useWebRTC() {
     }
 
     receiveBuffers.delete(peerId)
+    lastCompleteSeq.delete(peerId)
+    lastKeyFrameRequestAt.delete(peerId)
+    messageSeqByPeer.delete(peerId)
     connectionCount.value = peerConnections.value.size
   }
 
@@ -171,6 +187,12 @@ export function useWebRTC() {
           return
         }
 
+        if (msgType === MSG_TYPE_KEYFRAME_REQUEST) {
+          // 收到对端的关键帧请求（对方检测到丢帧/解码错误）
+          onKeyFrameRequested?.(peerId)
+          return
+        }
+
         handleReceivedChunk(peerId, event.data)
       }
     }
@@ -205,8 +227,23 @@ export function useWebRTC() {
       const totalChunks = view.getUint16(7, true)
       const totalSize = view.getUint32(9, true)
 
+      // 检测更早的消息是否被整帧丢弃（分片和 COMPLETE 都被 SCTP 放弃重传，
+      // 由于 DataChannel 是 ordered，被跳过的序号不会再补到）
+      const expectedSeq = (lastCompleteSeq.get(peerId) ?? -1) + 1
+      if (msgSeq > expectedSeq) {
+        for (let s = expectedSeq; s < msgSeq; s++) {
+          peerBuffer.delete(s)
+        }
+        onFrameLoss?.(peerId)
+      }
+      lastCompleteSeq.set(peerId, msgSeq)
+
       const chunks = peerBuffer.get(msgSeq)
-      if (!chunks) return
+      if (!chunks) {
+        // 该帧的所有分片都被放弃重传，只有 COMPLETE 标记到达
+        onFrameLoss?.(peerId)
+        return
+      }
 
       // 检查是否收齐所有分片
       let complete = true
@@ -231,6 +268,10 @@ export function useWebRTC() {
 
         peerBuffer.delete(msgSeq)
         onDataReceived?.(peerId, result.buffer)
+      } else {
+        // 部分分片被放弃重传，帧无法重组，丢弃残留数据避免内存泄漏
+        peerBuffer.delete(msgSeq)
+        onFrameLoss?.(peerId)
       }
     }
   }
@@ -326,7 +367,8 @@ export function useWebRTC() {
     }
 
     try {
-      const seq = messageSeq++
+      const seq = messageSeqByPeer.get(peerId) ?? 0
+      messageSeqByPeer.set(peerId, seq + 1)
       const dataArray = new Uint8Array(data)
       const totalChunks = Math.ceil(dataArray.length / CHUNK_SIZE)
 
@@ -386,6 +428,9 @@ export function useWebRTC() {
     }
 
     receiveBuffers.delete(peerId)
+    lastCompleteSeq.delete(peerId)
+    lastKeyFrameRequestAt.delete(peerId)
+    messageSeqByPeer.delete(peerId)
     connectionCount.value = peerConnections.value.size
   }
 
@@ -398,6 +443,9 @@ export function useWebRTC() {
     peerConnections.value.clear()
 
     receiveBuffers.clear()
+    lastCompleteSeq.clear()
+    lastKeyFrameRequestAt.clear()
+    messageSeqByPeer.clear()
     connectionState.value = 'disconnected'
     connectionCount.value = 0
   }
@@ -431,6 +479,14 @@ export function useWebRTC() {
 
   function setOnNatInfoReceived(callback: (peerId: string, natType: NatType) => void) {
     onNatInfoReceived = callback
+  }
+
+  function setOnFrameLoss(callback: (peerId: string) => void) {
+    onFrameLoss = callback
+  }
+
+  function setOnKeyFrameRequested(callback: (peerId: string) => void) {
+    onKeyFrameRequested = callback
   }
 
   // 发送 ping 到指定 peer
@@ -469,6 +525,23 @@ export function useWebRTC() {
     dataChannels.value.forEach((_channel, peerId) => {
       sendNatInfo(peerId, natType)
     })
+  }
+
+  // 向指定 peer 发送关键帧请求（丢帧/解码错误时调用），带节流避免刷屏
+  function sendKeyFrameRequest(peerId: string): boolean {
+    const channel = dataChannels.value.get(peerId)
+    if (!channel || channel.readyState !== 'open') return false
+
+    const now = performance.now()
+    const last = lastKeyFrameRequestAt.get(peerId) ?? 0
+    if (now - last < KEYFRAME_REQUEST_COOLDOWN_MS) return false
+    lastKeyFrameRequestAt.set(peerId, now)
+
+    const msg = new ArrayBuffer(1)
+    new DataView(msg).setUint8(0, MSG_TYPE_KEYFRAME_REQUEST)
+    channel.send(msg)
+    logger.log(`Sent keyframe request to ${peerId}`)
+    return true
   }
 
   // 获取指定连接实际使用的媒体链路类型（直连 / 经 TURN 中转）。
@@ -548,10 +621,13 @@ export function useWebRTC() {
     setOnRemoteTrack,
     setOnPongReceived,
     setOnNatInfoReceived,
+    setOnFrameLoss,
+    setOnKeyFrameRequested,
     sendPing,
     sendPingToAll,
     sendNatInfo,
     sendNatInfoToAll,
+    sendKeyFrameRequest,
     getConnectionType,
     getConnectionCount,
     getConnectedPeers

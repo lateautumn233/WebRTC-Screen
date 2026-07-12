@@ -306,9 +306,16 @@ function setupSignalingCallbacks() {
 
     // 为该共享者初始化解码器
     if (!webcodecs.hasDecoder(senderId)) {
-      await webcodecs.initDecoderForSharer(senderId, (frame, decodeLatencyMs) => {
-        videoGrid.value?.drawFrame(senderId, frame, decodeLatencyMs)
-      })
+      await webcodecs.initDecoderForSharer(
+        senderId,
+        (frame, decodeLatencyMs) => {
+          videoGrid.value?.drawFrame(senderId, frame, decodeLatencyMs)
+        },
+        () => {
+          // 解码器出错后会自动关闭，向该共享者请求关键帧以重新配置解码器、恢复画面
+          webrtc.sendKeyFrameRequest(sharerKey(senderId))
+        }
+      )
     }
   })
 
@@ -349,6 +356,22 @@ function setupWebRTCCallbacks() {
   // ICE candidate：peerId 带方向前缀，需要还原原始 ID 发送信令
   webrtc.setOnIceCandidate((peerId, candidate) => {
     signaling.sendIceCandidate(stripKey(peerId), candidate)
+  })
+
+  // 收到对端的关键帧请求（作为共享者端，peerId 带 viewer: 前缀）：对方检测到丢帧/解码错误
+  webrtc.setOnKeyFrameRequested((peerId) => {
+    logger.log(`Conference: Keyframe requested by ${peerId}`)
+    if (isSharing.value && peerId.startsWith('viewer:')) {
+      webcodecs.requestKeyFrame()
+    }
+  })
+
+  // 检测到丢帧（作为观看者端，peerId 带 sharer: 前缀）：向该共享者请求关键帧尽快恢复画面
+  webrtc.setOnFrameLoss((peerId) => {
+    if (peerId.startsWith('sharer:')) {
+      logger.warn(`Conference: Frame loss detected from ${peerId}, requesting keyframe`)
+      webrtc.sendKeyFrameRequest(peerId)
+    }
   })
 
   // DataChannel 打开时请求关键帧（仅作为共享者端，即 viewer: 前缀的连接）

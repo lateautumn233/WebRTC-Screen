@@ -23,6 +23,8 @@ export function useWebCodecs() {
   let onEncodedFrame: ((data: EncodedFrameData) => void) | null = null
   // 解码输出回调
   let onDecodedFrame: ((frame: VideoFrame, decodeLatencyMs: number) => void) | null = null
+  // 解码器出错回调（解码器会自动进入 closed 状态，无法继续使用，需要调用方重新 initDecoder 并请求关键帧）
+  let onDecoderError: (() => void) | null = null
 
   // 编码延迟测量：帧 timestamp -> performance.now()
   const encodeStartTimes = new Map<number, number>()
@@ -369,10 +371,14 @@ export function useWebCodecs() {
   let decoderConfig: VideoDecoderConfig | null = null
 
   // 初始化解码器
-  async function initDecoder(onOutput: (frame: VideoFrame, decodeLatencyMs: number) => void) {
+  async function initDecoder(
+    onOutput: (frame: VideoFrame, decodeLatencyMs: number) => void,
+    onError?: () => void
+  ) {
     try {
       error.value = null
       onDecodedFrame = onOutput
+      onDecoderError = onError ?? null
 
       decoder.value = new VideoDecoder({
         output: (frame) => {
@@ -384,6 +390,8 @@ export function useWebCodecs() {
         error: (e) => {
           error.value = `解码器错误: ${e.message}`
           logger.error('Decoder error:', e)
+          // VideoDecoder 出错后会自动转入 closed 状态，无法继续 decode，通知调用方重建解码器并请求关键帧恢复
+          onDecoderError?.()
         }
       })
 
@@ -515,6 +523,7 @@ export function useWebCodecs() {
 
     isDecoding.value = false
     onDecodedFrame = null
+    onDecoderError = null
     decoderConfig = null
   }
 

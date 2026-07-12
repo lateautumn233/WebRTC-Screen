@@ -336,9 +336,15 @@ function setupSignalingCallbacks() {
 
     // 初始化解码器
     if (!webcodecs.isDecoding.value) {
-      await webcodecs.initDecoder((frame, decodeLatencyMs) => {
-        videoPlayer.value?.drawFrame(frame, decodeLatencyMs)
-      })
+      await webcodecs.initDecoder(
+        (frame, decodeLatencyMs) => {
+          videoPlayer.value?.drawFrame(frame, decodeLatencyMs)
+        },
+        () => {
+          // 解码器出错后会自动关闭，向主持人请求关键帧以重新配置解码器、恢复画面
+          webrtc.sendKeyFrameRequest(senderId)
+        }
+      )
       isReceiving.value = true
     }
   })
@@ -379,6 +385,18 @@ function setupWebRTCCallbacks() {
     } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
       viewerNatTypes.delete(peerId)
     }
+  })
+
+  // 收到对端的关键帧请求（主持人端）：对方检测到丢帧/解码错误，强制下一帧为关键帧
+  webrtc.setOnKeyFrameRequested((peerId) => {
+    logger.log(`Keyframe requested by ${peerId}`)
+    webcodecs.requestKeyFrame()
+  })
+
+  // 检测到丢帧（观众端）：向主持人请求关键帧，尽快恢复画面而不是等待下一个周期性关键帧
+  webrtc.setOnFrameLoss((peerId) => {
+    logger.warn(`Frame loss detected from ${peerId}, requesting keyframe`)
+    webrtc.sendKeyFrameRequest(peerId)
   })
 
   // DataChannel 打开时请求关键帧 (主持人端) / 启动 ping (观众端)

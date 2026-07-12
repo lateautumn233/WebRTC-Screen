@@ -28,7 +28,8 @@ export function useConferenceWebCodecs() {
   // 为特定共享者初始化解码器
   async function initDecoderForSharer(
     sharerId: string,
-    onOutput: (frame: VideoFrame, decodeLatencyMs: number) => void
+    onOutput: (frame: VideoFrame, decodeLatencyMs: number) => void,
+    onError?: () => void
   ) {
     // 如果已存在，先停止
     await stopDecoderForSharer(sharerId)
@@ -45,6 +46,8 @@ export function useConferenceWebCodecs() {
       },
       error: (e) => {
         logger.error(`Decoder error for sharer ${sharerId}:`, e)
+        // VideoDecoder 出错后会自动转入 closed 状态，通知调用方重建解码器并请求关键帧恢复
+        onError?.()
       }
     })
 
