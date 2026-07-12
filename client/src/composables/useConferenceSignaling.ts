@@ -1,6 +1,6 @@
 import { ref, onUnmounted } from 'vue'
 import { io, Socket } from 'socket.io-client'
-import type { ConferenceRoomState, ParticipantInfo } from '../types'
+import type { ConferenceRoomState, ParticipantInfo, NatType } from '../types'
 import { logger } from '../utils/logger'
 
 const SIGNALING_SERVER = import.meta.env.VITE_SIGNALING_SERVER || 'http://localhost:3000'
@@ -139,6 +139,10 @@ export function useConferenceSignaling() {
     socket.value?.emit('request-peer-stream', { targetId })
   }
 
+  function updateNatType(natType: NatType) {
+    socket.value?.emit('update-nat-type', { natType })
+  }
+
   function sendOffer(targetId: string, offer: RTCSessionDescriptionInit) {
     socket.value?.emit('offer', { targetId, offer })
   }
@@ -198,6 +202,7 @@ export function useConferenceSignaling() {
     startSharing,
     stopSharing,
     requestPeerStream,
+    updateNatType,
     sendOffer,
     sendAnswer,
     sendIceCandidate,

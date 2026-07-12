@@ -8,6 +8,7 @@ interface ParticipantInfo {
   id: string
   isSharing: boolean
   username?: string
+  natType?: string
 }
 
 interface Room {
@@ -215,6 +216,21 @@ io.on('connection', (socket: Socket) => {
         participants: Array.from(room.participants.values())
       })
       console.log(`Participant ${socket.id} stopped sharing in room ${currentRoom}`)
+    }
+  })
+
+  // 会议模式：上报本机 NAT 类型，广播给房间内所有人（无需 P2P 连接即可让对方看到）
+  socket.on('update-nat-type', (data: { natType: string }) => {
+    if (!currentRoom) return
+    const room = rooms.get(currentRoom)
+    if (!room || room.mode !== 'conference') return
+
+    const participant = room.participants.get(socket.id)
+    if (participant) {
+      participant.natType = data.natType
+      io.to(currentRoom).emit('conference-state', {
+        participants: Array.from(room.participants.values())
+      })
     }
   })
 

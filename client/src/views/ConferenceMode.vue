@@ -74,7 +74,6 @@
             :nat-check-configured="natDetection.natCheckConfigured.value"
             :nat-detecting="natDetection.detecting.value"
             :local-nat-type="natDetection.localNatType.value"
-            :participant-nat-types="participantNatTypes"
             @join="handleJoinRoom"
             @leave="handleLeaveRoom"
             @watch="startWatching"
@@ -97,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import VideoGrid from '../components/VideoGrid.vue'
 import SettingsPanel from '../components/SettingsPanel.vue'
 import ConferenceRoomPanel from '../components/ConferenceRoomPanel.vue'
@@ -107,7 +106,7 @@ import { useScreenCapture } from '../composables/useScreenCapture'
 import { useConferenceWebCodecs } from '../composables/useConferenceWebCodecs'
 import { useWebRTC } from '../composables/useWebRTC'
 import { useNatDetection } from '../composables/useNatDetection'
-import type { EncoderSettings, NatType } from '../types'
+import type { EncoderSettings } from '../types'
 import { logger } from '../utils/logger'
 import { saveSettings, loadSettings, saveSession, clearSession, loadSession, saveRoomHistory, loadUsername } from '../utils/storage'
 
@@ -127,12 +126,6 @@ const isSharing = ref(false)
 const encoderSupported = ref(true)
 const remoteSharers = ref<{ id: string; label?: string }[]>([])
 const availableSharers = ref<string[]>([])
-// 共享者视角：各观看者的 NAT 类型
-const watcherNatTypes = reactive(new Map<string, NatType>())
-// 观看者视角：正在观看的各共享者的 NAT 类型
-const sharerNatTypes = reactive(new Map<string, NatType>())
-// 合并两个方向，供参与者列表按 id 展示对方的 NAT 类型
-const participantNatTypes = computed(() => new Map([...sharerNatTypes, ...watcherNatTypes]))
 let pingInterval: ReturnType<typeof setInterval> | null = null
 // 监听设置变化
 watch(encoderSettings, (newSettings) => {
@@ -179,8 +172,6 @@ function handleLeaveRoom() {
   webrtc.closeAll()
   remoteSharers.value = []
   availableSharers.value = []
-  watcherNatTypes.clear()
-  sharerNatTypes.clear()
   signaling.disconnect()
   signaling.connect()
   clearSession()
@@ -238,7 +229,6 @@ async function stopSharing() {
   const viewerPeers = [...webrtc.peerConnections.value.keys()]
     .filter(key => key.startsWith('viewer:'))
   viewerPeers.forEach(key => webrtc.closePeer(key))
-  watcherNatTypes.clear()
 }
 
 // 开始观看某个共享者
@@ -253,7 +243,6 @@ function stopWatching(sharerId: string) {
   remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
   webcodecs.stopDecoderForSharer(sharerId)
   webrtc.closePeer(sharerKey(sharerId))
-  sharerNatTypes.delete(sharerId)
   videoGrid.value?.clearSharer(sharerId)
 }
 
@@ -276,6 +265,11 @@ function setupSignalingCallbacks() {
         }
       }
     }
+
+    // 若加入房间前本机 NAT 类型已探测完成，上面的 watch 不会再触发，这里补发一次
+    if (natDetection.localNatType.value !== 'unknown') {
+      signaling.updateNatType(natDetection.localNatType.value)
+    }
   })
 
   // 有新共享者开始共享
@@ -293,7 +287,6 @@ function setupSignalingCallbacks() {
     remoteSharers.value = remoteSharers.value.filter(s => s.id !== sharerId)
     webcodecs.stopDecoderForSharer(sharerId)
     webrtc.closePeer(sharerKey(sharerId))
-    sharerNatTypes.delete(sharerId)
     videoGrid.value?.clearSharer(sharerId)
   })
 
@@ -347,8 +340,6 @@ function setupSignalingCallbacks() {
     // 关闭两个方向的连接
     webrtc.closePeer(sharerKey(participantId))
     webrtc.closePeer(viewerKey(participantId))
-    watcherNatTypes.delete(participantId)
-    sharerNatTypes.delete(participantId)
     videoGrid.value?.clearSharer(participantId)
   })
 }
@@ -386,14 +377,12 @@ function setupWebRTCCallbacks() {
     }
   })
 
-  // 收到对端 NAT 类型信息：sharer: 前缀 = 我在观看对方，viewer: 前缀 = 对方在观看我
+  // 收到对端 NAT 类型信息（P2P DataChannel）：仅用于共享者视频瓦片上的 NAT 角标。
+  // 参与者列表里"对方 NAT 类型"改由信令服务器广播（见 updateNatType/conference-state），
+  // 不依赖 P2P 连接，房间内所有人一进房就能看到
   webrtc.setOnNatInfoReceived((peerId, natType) => {
-    const originalId = stripKey(peerId)
     if (peerId.startsWith('sharer:')) {
-      videoGrid.value?.setNatType(originalId, natType)
-      sharerNatTypes.set(originalId, natType)
-    } else if (peerId.startsWith('viewer:')) {
-      watcherNatTypes.set(originalId, natType)
+      videoGrid.value?.setNatType(stripKey(peerId), natType)
     }
   })
 
@@ -432,9 +421,11 @@ function setupWebRTCCallbacks() {
   })
 }
 
-// 本机 NAT 类型探测完成后，补发给所有已连接的对端（可能晚于 DataChannel 打开）
+// 本机 NAT 类型探测完成后：广播给信令服务器（供房间内所有参与者展示，无需 P2P 连接），
+// 并补发给已连接的 P2P 对端（可能晚于 DataChannel 打开）
 watch(natDetection.localNatType, (natType) => {
   if (natType !== 'unknown') {
+    signaling.updateNatType(natType)
     webrtc.sendNatInfoToAll(natType)
   }
 })

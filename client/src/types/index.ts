@@ -70,6 +70,8 @@ export interface ParticipantInfo {
   id: string
   isSharing: boolean
   username?: string
+  // 该参与者上报的本机 NAT 类型（经信令服务器广播，加入房间后无需建立 P2P 连接即可获得）
+  natType?: NatType
 }
 
 // 会议模式房间状态
@@ -103,6 +105,7 @@ export interface SignalingEvents {
   'request-peer-stream': { targetId: string }
   'peer-stream-requested': { viewerId: string }
   'participant-left': { participantId: string }
+  'update-nat-type': { natType: NatType }
 }
 
 // NAT 类型（探测结果由外部 NAT 检测服务给出，本仓库不重新实现探测逻辑）
@@ -120,6 +123,18 @@ export const NAT_TYPE_LABEL_MAP: Record<NatType, string> = {
   cone_unknown: '锥形（子类型未知）',
   blocked: 'UDP 受限',
   unknown: '未检测'
+}
+
+// NAT 类型短文案（用于参与者列表等空间受限处，只保留 NAT1-4 简写）
+export const NAT_TYPE_SHORT_LABEL_MAP: Record<NatType, string> = {
+  open: '公网',
+  nat1: 'NAT1',
+  nat2: 'NAT2',
+  nat3: 'NAT3',
+  nat4: 'NAT4',
+  cone_unknown: '锥形',
+  blocked: '受限',
+  unknown: '未知'
 }
 
 // NAT 类型徽章样式（延续 emerald=最佳/teal-sky=良好/amber=谨慎/rose=较差/indigo=不确定/slate=未知 的配色语义）

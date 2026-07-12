@@ -118,10 +118,11 @@
               </span>
               <span class="flex items-center gap-1.5 shrink-0">
                 <span
-                  v-if="p.id !== roomState.myId && participantNat(p.id)"
-                  :class="['px-1.5 py-0.5 rounded text-[10px] font-medium border', NAT_TYPE_BADGE_CLASS_MAP[participantNat(p.id) ?? 'unknown']]"
+                  v-if="p.id !== roomState.myId && p.natType && p.natType !== 'unknown'"
+                  :class="['px-1.5 py-0.5 rounded text-[10px] font-medium border', NAT_TYPE_BADGE_CLASS_MAP[p.natType]]"
+                  :title="NAT_TYPE_LABEL_MAP[p.natType]"
                 >
-                  {{ NAT_TYPE_LABEL_MAP[participantNat(p.id) ?? 'unknown'] }}
+                  {{ NAT_TYPE_SHORT_LABEL_MAP[p.natType] }}
                 </span>
                 <span
                   v-if="p.isSharing && p.id !== roomState.myId && watchingSharers.includes(p.id)"
@@ -169,7 +170,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { ConferenceRoomState, NatType } from '../types'
-import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
+import { NAT_TYPE_LABEL_MAP, NAT_TYPE_SHORT_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 import { loadUsername, saveUsername, loadRoomHistory, removeRoomHistory } from '../utils/storage'
 
 interface Props {
@@ -181,19 +182,13 @@ interface Props {
   natCheckConfigured?: boolean
   natDetecting?: boolean
   localNatType?: NatType
-  participantNatTypes?: Map<string, NatType>
 }
 
 const props = withDefaults(defineProps<Props>(), {
   natCheckConfigured: false,
   natDetecting: false,
-  localNatType: 'unknown',
-  participantNatTypes: () => new Map()
+  localNatType: 'unknown'
 })
-
-function participantNat(id: string): NatType | undefined {
-  return props.participantNatTypes.get(id)
-}
 
 const emit = defineEmits<{
   join: [roomId: string, username: string]
