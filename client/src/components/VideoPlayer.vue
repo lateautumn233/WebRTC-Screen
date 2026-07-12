@@ -91,11 +91,11 @@
       </button>
     </div>
 
-    <!-- 统计信息面板：半透明纯色，无 backdrop-filter，避免视频区 GPU 合成开销 -->
-    <div v-if="showStats && statsVisible && stats && !isFullscreen && !isPageFullscreen" class="absolute bottom-3 left-3 right-3">
-      <div class="bg-black/55 rounded-xl px-4 py-3 space-y-2">
+    <!-- 统计信息面板：半透明纯色，无 backdrop-filter，避免视频区 GPU 合成开销；移动端收窄内边距/字号并限高，避免遮挡画面 -->
+    <div v-if="showStats && statsVisible && stats && !isFullscreen && !isPageFullscreen" class="absolute bottom-1.5 left-1.5 right-1.5 sm:bottom-3 sm:left-3 sm:right-3">
+      <div class="bg-black/55 rounded-lg sm:rounded-xl px-2 py-1.5 sm:px-4 sm:py-3 space-y-1 sm:space-y-2 max-h-[40%] overflow-y-auto">
         <!-- 第一行：媒体信息 -->
-        <div class="flex items-center gap-4 text-xs">
+        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-4 text-[11px] sm:text-xs">
           <div class="flex items-center gap-1.5">
             <span class="text-slate-500">分辨率</span>
             <span class="text-slate-200 font-medium">{{ stats.resolution }}</span>
@@ -125,7 +125,7 @@
         <!-- 分隔线 -->
         <div class="border-t border-white/10"></div>
         <!-- 第二行：性能指标 -->
-        <div class="grid grid-cols-3 md:grid-cols-5 gap-2 text-xs">
+        <div class="grid grid-cols-3 sm:grid-cols-5 gap-1.5 sm:gap-2 text-[11px] sm:text-xs">
           <div class="flex flex-col">
             <span class="text-slate-500">帧率</span>
             <span class="text-emerald-300 font-medium">{{ stats.fps }} fps</span>
