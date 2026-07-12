@@ -90,14 +90,14 @@
         {{ isFullscreenSharer === sharer.id ? '按 ESC 退出全屏' : '点击按钮退出网页全屏' }}
       </div>
 
-      <!-- 统计信息：半透明纯色，无 backdrop-filter，避免视频区 GPU 合成开销 -->
+      <!-- 统计信息：半透明纯色，无 backdrop-filter，避免视频区 GPU 合成开销；移动端收窄内边距/字号并限高，避免遮挡画面 -->
       <div
         v-if="showStats && sharerStats.get(sharer.id) && isFullscreenSharer !== sharer.id && isPageFullscreenSharer !== sharer.id"
-        class="absolute bottom-2.5 left-2.5 right-2.5"
+        class="absolute bottom-1.5 left-1.5 right-1.5 sm:bottom-2.5 sm:left-2.5 sm:right-2.5"
       >
-        <div class="bg-black/55 rounded-lg px-3 py-2 space-y-1.5">
+        <div class="bg-black/55 rounded-md sm:rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 space-y-1 sm:space-y-1.5 max-h-[40%] overflow-y-auto">
           <!-- 第一行：媒体信息 -->
-          <div class="flex items-center gap-3 text-xs">
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-3 text-[10px] sm:text-xs">
             <div class="flex items-center gap-1">
               <span class="text-slate-500">分辨率</span>
               <span class="text-slate-200 font-medium">{{ sharerStats.get(sharer.id)?.resolution }}</span>
@@ -129,7 +129,7 @@
           <!-- 分隔线 -->
           <div class="border-t border-white/10"></div>
           <!-- 第二行：性能指标 -->
-          <div class="grid grid-cols-3 sm:grid-cols-5 gap-1 text-xs">
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-1 text-[10px] sm:text-xs">
             <div class="flex flex-col">
               <span class="text-slate-500">帧率</span>
               <span class="text-emerald-300 font-medium">{{ sharerStats.get(sharer.id)?.fps }} fps</span>
