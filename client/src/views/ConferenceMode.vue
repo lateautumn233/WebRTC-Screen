@@ -364,13 +364,16 @@ function setupWebRTCCallbacks() {
       webrtc.sendNatInfo(peerId, natDetection.localNatType.value)
     }
 
-    // 作为观看者：启动 ping 定时器测量网络延迟
+    // 作为观看者：启动 ping 定时器测量网络延迟，顺带轮询各共享者连接是直连还是经 TURN 中转
     if (peerId.startsWith('sharer:') && !pingInterval) {
       pingInterval = setInterval(() => {
         // 只向 sharer: 前缀的连接发 ping
         webrtc.dataChannels.value.forEach((_channel, key) => {
           if (key.startsWith('sharer:')) {
             webrtc.sendPing(key)
+            webrtc.getConnectionType(key).then((type) => {
+              videoGrid.value?.setConnectionType(stripKey(key), type)
+            })
           }
         })
       }, 1000)

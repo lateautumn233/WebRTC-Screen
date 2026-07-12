@@ -1,5 +1,5 @@
 import { ref, shallowRef } from 'vue'
-import type { ConnectionState, NatType } from '../types'
+import type { ConnectionState, NatType, MediaRouteType } from '../types'
 import { NAT_TYPE_BYTE_MAP, NAT_TYPE_BYTE_TO_TYPE } from '../types'
 import { logger } from '../utils/logger'
 
@@ -471,6 +471,44 @@ export function useWebRTC() {
     })
   }
 
+  // 获取指定连接实际使用的媒体链路类型（直连 / 经 TURN 中转）。
+  // 通过 getStats() 找到当前生效的 candidate-pair，只要本端或对端的候选是 relay 类型即视为中转。
+  async function getConnectionType(peerId: string): Promise<MediaRouteType> {
+    const pc = peerConnections.value.get(peerId)
+    if (!pc) return 'unknown'
+
+    try {
+      const report = await pc.getStats()
+
+      let pairId: string | undefined
+      report.forEach((stat) => {
+        if (stat.type === 'transport' && stat.selectedCandidatePairId) {
+          pairId = stat.selectedCandidatePairId
+        }
+      })
+
+      let pair = pairId ? report.get(pairId) : undefined
+      if (!pair) {
+        // 回退：部分浏览器的 transport 报告可能没有 selectedCandidatePairId，
+        // 改为在 candidate-pair 里找已提名且成功的那一对
+        report.forEach((stat) => {
+          if (stat.type === 'candidate-pair' && stat.nominated && stat.state === 'succeeded') {
+            pair = stat
+          }
+        })
+      }
+      if (!pair) return 'unknown'
+
+      const localCandidate = report.get(pair.localCandidateId)
+      const remoteCandidate = report.get(pair.remoteCandidateId)
+      const isRelay = localCandidate?.candidateType === 'relay' || remoteCandidate?.candidateType === 'relay'
+      return isRelay ? 'relay' : 'direct'
+    } catch (err) {
+      logger.error(`Failed to get connection type for ${peerId}:`, err)
+      return 'unknown'
+    }
+  }
+
   // 获取连接数
   function getConnectionCount(): number {
     return peerConnections.value.size
@@ -514,6 +552,7 @@ export function useWebRTC() {
     sendPingToAll,
     sendNatInfo,
     sendNatInfoToAll,
+    getConnectionType,
     getConnectionCount,
     getConnectedPeers
   }

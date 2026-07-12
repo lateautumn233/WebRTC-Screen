@@ -392,10 +392,16 @@ function setupWebRTCCallbacks() {
       webrtc.sendNatInfo(peerId, natDetection.localNatType.value)
     }
 
-    // 观众端：启动 ping 定时器测量网络延迟
+    // 观众端：启动 ping 定时器测量网络延迟，顺带轮询当前连接是直连还是经 TURN 中转
     if (isViewer.value && !pingInterval) {
       pingInterval = setInterval(() => {
         webrtc.sendPingToAll()
+        const [hostPeerId] = webrtc.getConnectedPeers()
+        if (hostPeerId) {
+          webrtc.getConnectionType(hostPeerId).then((type) => {
+            videoPlayer.value?.setConnectionType(type)
+          })
+        }
       }, 1000)
     }
   })

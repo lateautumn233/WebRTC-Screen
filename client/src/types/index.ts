@@ -50,6 +50,9 @@ export const DEFAULT_ENCODER_SETTINGS: EncoderSettings = {
 // 连接状态
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'failed'
 
+// 媒体链路类型：direct = 双方 P2P 直连（host/srflx 候选对），relay = 经 TURN 服务器中转
+export type MediaRouteType = 'direct' | 'relay' | 'unknown'
+
 // 房间模式
 export type RoomMode = 'classic' | 'conference'
 

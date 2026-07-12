@@ -112,6 +112,19 @@
                 {{ NAT_TYPE_LABEL_MAP[sharerNatTypes.get(sharer.id)!] }}
               </span>
             </div>
+            <div v-if="sharerConnectionTypes.get(sharer.id) && sharerConnectionTypes.get(sharer.id) !== 'unknown'" class="flex items-center gap-1">
+              <span class="text-slate-500">连接方式</span>
+              <span
+                :class="[
+                  'px-1.5 py-0.5 rounded font-medium',
+                  sharerConnectionTypes.get(sharer.id) === 'relay'
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                ]"
+              >
+                {{ sharerConnectionTypes.get(sharer.id) === 'relay' ? '中转' : '直连' }}
+              </span>
+            </div>
           </div>
           <!-- 分隔线 -->
           <div class="border-t border-white/10"></div>
@@ -166,7 +179,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, reactive, onMounted, onUnmounted } from 'vue'
 import { api as fullscreen } from 'vue-fullscreen'
-import type { NatType } from '../types'
+import type { NatType, MediaRouteType } from '../types'
 import { NAT_TYPE_LABEL_MAP, NAT_TYPE_BADGE_CLASS_MAP } from '../types'
 
 interface SharerInfo {
@@ -216,6 +229,8 @@ const audioRefs = new Map<string, HTMLAudioElement>()
 const sharerStats = reactive(new Map<string, SharerStats>())
 // 对端 NAT 类型：离散的瞬时值，独立于下方的 250ms EMA 刷新循环
 const sharerNatTypes = reactive(new Map<string, NatType>())
+// 媒体链路类型（直连/中转）：同样是离散的瞬时值，由父组件轮询 getStats() 后推入
+const sharerConnectionTypes = reactive(new Map<string, MediaRouteType>())
 const sharerFrameCounts = new Map<string, number>()
 const sharerCurrentFps = new Map<string, number>()
 const sharerTotalBytes = new Map<string, number>()
@@ -466,6 +481,11 @@ function setNatType(sharerId: string, nat: NatType) {
   sharerNatTypes.set(sharerId, nat)
 }
 
+// 设置媒体链路类型
+function setConnectionType(sharerId: string, type: MediaRouteType) {
+  sharerConnectionTypes.set(sharerId, type)
+}
+
 // 添加接收字节数（用于码率统计）
 function addReceivedBytes(sharerId: string, bytes: number) {
   const current = sharerTotalBytes.get(sharerId) ?? 0
@@ -495,6 +515,7 @@ function clearSharer(sharerId: string) {
   audioRefs.delete(sharerId)
   sharerStats.delete(sharerId)
   sharerNatTypes.delete(sharerId)
+  sharerConnectionTypes.delete(sharerId)
   sharerFrameCounts.delete(sharerId)
   sharerCurrentFps.delete(sharerId)
   sharerTotalBytes.delete(sharerId)
@@ -529,6 +550,7 @@ onUnmounted(() => {
   audioRefs.clear()
   sharerStats.clear()
   sharerNatTypes.clear()
+  sharerConnectionTypes.clear()
 })
 
 defineExpose({
@@ -539,6 +561,7 @@ defineExpose({
   setEncodeLatency,
   setNetworkLatency,
   setNatType,
+  setConnectionType,
   clearSharer
 })
 </script>
